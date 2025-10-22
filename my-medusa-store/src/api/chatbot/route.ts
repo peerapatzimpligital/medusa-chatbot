@@ -18,12 +18,6 @@ export const POST = async (
             case 'product_search':
                 response = await handleProductSearch(req, query, intent)
                 break
-            case 'specific_product':
-                response = await handleSpecificProduct(req, intent)
-                break
-            case 'order_status':
-                response = await handleOrderStatus(req, intent)
-                break
             default:
                 response = await handleClarification(query)
         }
@@ -47,16 +41,6 @@ function detectIntent(query: string) {
     // Product search patterns
     if (lowerQuery.match(/looking for|search|find|show me|need|want/)) {
         return { type: 'product_search', keywords: extractKeywords(query) }
-    }
-
-    // Order tracking
-    if (lowerQuery.match(/order|tracking|status|where is my/)) {
-        return { type: 'order_status', orderId: extractOrderId(query) }
-    }
-
-    // Specific product
-    if (lowerQuery.match(/tell me about|details|information about/)) {
-        return { type: 'specific_product', productName: query }
     }
 
     return { type: 'clarification' }
@@ -90,7 +74,7 @@ async function handleProductSearch(req: MedusaRequest, query: string, intent: an
     })
 
     // Index products if not already done and vector search is configured
-    if (vectorSearch.isConfigured() && !vectorSearch.hasEmbeddings() && allProducts.length > 0) {
+    if (vectorSearch.isConfigured() && !await vectorSearch.hasEmbeddings() && allProducts.length > 0) {
         console.log("Indexing products for vector search...")
         const productsToIndex = allProducts.map(p => ({
             id: p.id,
@@ -104,7 +88,7 @@ async function handleProductSearch(req: MedusaRequest, query: string, intent: an
     let products = allProducts
 
     // Try vector search if configured
-    if (vectorSearch.isConfigured() && vectorSearch.hasEmbeddings()) {
+    if (vectorSearch.isConfigured() && await vectorSearch.hasEmbeddings()) {
         try {
             const productIds = await vectorSearch.searchProducts(query, 5)
             if (productIds.length > 0) {
@@ -144,63 +128,12 @@ async function handleProductSearch(req: MedusaRequest, query: string, intent: an
     }
 }
 
-async function handleSpecificProduct(req: MedusaRequest, intent: any) {
-    const remoteQuery = req.scope.resolve(ContainerRegistrationKeys.REMOTE_QUERY)
-
-    const products = await remoteQuery({
-        entryPoint: "product",
-        fields: [
-            "id",
-            "title",
-            "description",
-            "thumbnail",
-            "variants.*",
-            "variants.calculated_price.*"
-        ],
-        variables: {
-            filters: {
-                title: { $ilike: `%${intent.productName}%` },
-                status: ["published"]
-            }
-        }
-    })
-
-    if (products.length === 0) {
-        return {
-            message: "I couldn't find that product. Can you provide more details?",
-            suggestions: ["Show me all products", "What's popular?"]
-        }
-    }
-
-    const product = products[0]
+async function handleClarification(_query: string) {
     return {
-        message: `Here's information about ${product.title}: ${product.description}`,
-        products: [formatProduct(product)]
-    }
-}
-
-async function handleOrderStatus(req: MedusaRequest, intent: any) {
-    if (!intent.orderId) {
-        return {
-            message: "Please provide your order ID to check the status.",
-            suggestions: ["I don't have my order ID"]
-        }
-    }
-
-    // Simplified order lookup
-    return {
-        message: "To check your order status, please log in to your account or provide your order number.",
-        suggestions: ["Go to my orders"]
-    }
-}
-
-async function handleClarification(query: string) {
-    return {
-        message: "I can help you find products, check order status, or answer questions about our store. What would you like to do?",
+        message: "I can help you find products or answer questions about our store. What would you like to do?",
         suggestions: [
             "Show me popular products",
-            "I'm looking for a specific item",
-            "Check my order status"
+            "I'm looking for a specific item"
         ]
     }
 }
@@ -239,11 +172,6 @@ function extractKeywords(query: string): string {
         .split(' ')
         .filter(word => !stopWords.includes(word))
         .join(' ')
-}
-
-function extractOrderId(query: string): string | null {
-    const match = query.match(/order[#\s]*(\w+)/i)
-    return match ? match[1] : null
 }
 
 function generateConversationId(): string {

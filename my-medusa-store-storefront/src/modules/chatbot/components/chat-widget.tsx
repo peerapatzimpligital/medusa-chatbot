@@ -20,7 +20,7 @@ export function ChatWidget() {
             id: "welcome",
             type: "bot",
             content: "Hi! I'm your shopping assistant. How can I help you today?",
-            suggestions: ["Show me popular products", "I'm looking for something specific"],
+            suggestions: ["Show me popular products"],
             timestamp: new Date()
         }
     ])

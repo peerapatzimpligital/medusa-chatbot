@@ -16,6 +16,7 @@
     "build": "medusa build",
     "seed": "medusa exec ./src/scripts/seed.ts",
     "seed:dummy": "medusa exec ./src/scripts/seed-dummyjson.ts",
+    "sync:meilisearch": "medusa exec ./src/scripts/sync-meilisearch.ts",
     "start": "medusa start",
     "dev": "medusa develop",
     "test:integration:http": "TEST_TYPE=integration:http NODE_OPTIONS=--experimental-vm-modules jest --silent=false --runInBand --forceExit",
@@ -27,6 +28,7 @@
     "@medusajs/cli": "2.11.0",
     "@medusajs/framework": "2.11.0",
     "@medusajs/medusa": "2.11.0",
+    "meilisearch": "^0.53.0",
     "openai": "^6.6.0"
   },
   "devDependencies": {

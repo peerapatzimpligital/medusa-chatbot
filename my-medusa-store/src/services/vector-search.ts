@@ -1,21 +1,48 @@
 import OpenAI from "openai"
 
-interface ProductEmbedding {
-    productId: string
-    embedding: number[]
-    text: string
+interface ProductDocument {
+    id: string
+    title: string
+    description: string
+    _vectors?: {
+        default: number[]
+    }
 }
-
-// In-memory storage for POC (use a vector DB like Pinecone/Weaviate in production)
-let productEmbeddings: ProductEmbedding[] = []
 
 export class VectorSearchService {
     private openai: OpenAI | null = null
+    private meilisearch: any = null
+    private indexName = "products"
+    private initPromise: Promise<void> | null = null
 
     constructor() {
         const apiKey = process.env.OPENAI_API_KEY
         if (apiKey) {
             this.openai = new OpenAI({ apiKey })
+        }
+
+        // Initialize Meilisearch asynchronously
+        this.initPromise = this.initMeilisearch()
+    }
+
+    private async initMeilisearch() {
+        try {
+            const { MeiliSearch } = await import("meilisearch")
+            const meilisearchUrl = process.env.MEILISEARCH_URL || "http://127.0.0.1:7700"
+            const meilisearchKey = process.env.MEILISEARCH_API_KEY || ""
+
+            this.meilisearch = new MeiliSearch({
+                host: meilisearchUrl,
+                apiKey: meilisearchKey,
+            })
+        } catch (error) {
+            console.warn("Meilisearch not available:", error)
+        }
+    }
+
+    private async ensureInitialized() {
+        if (this.initPromise) {
+            await this.initPromise
         }
     }
 
@@ -32,68 +59,131 @@ export class VectorSearchService {
         return response.data[0].embedding
     }
 
+    async initializeIndex() {
+        await this.ensureInitialized()
+        if (!this.meilisearch) return
+
+        try {
+            const index = this.meilisearch.index(this.indexName)
+
+            // Configure searchable attributes
+            await index.updateSearchableAttributes([
+                "title",
+                "description",
+            ])
+
+            // Configure filterable attributes
+            await index.updateFilterableAttributes(["id"])
+
+            // Configure embedder for hybrid search
+            await index.updateEmbedders({
+                default: {
+                    source: "userProvided",
+                    dimensions: 1536, // OpenAI text-embedding-3-small dimensions
+                },
+            })
+
+            console.log("Meilisearch index initialized with embedder")
+        } catch (error) {
+            console.warn("Failed to initialize Meilisearch index:", error)
+        }
+    }
+
     async indexProduct(productId: string, title: string, description: string) {
-        if (!this.openai) return
+        await this.ensureInitialized()
+        if (!this.meilisearch || !this.openai) return
 
-        const text = `${title} ${description}`.toLowerCase()
-        const embedding = await this.generateEmbedding(text)
+        try {
+            const text = `${title} ${description}`.toLowerCase()
+            const embedding = await this.generateEmbedding(text)
 
-        // Store or update embedding
-        const existingIndex = productEmbeddings.findIndex(p => p.productId === productId)
-        if (existingIndex >= 0) {
-            productEmbeddings[existingIndex] = { productId, embedding, text }
-        } else {
-            productEmbeddings.push({ productId, embedding, text })
+            const document: ProductDocument = {
+                id: productId,
+                title,
+                description: description || "",
+                _vectors: {
+                    default: embedding,
+                },
+            }
+
+            const index = this.meilisearch.index(this.indexName)
+            await index.addDocuments([document], { primaryKey: "id" })
+        } catch (error) {
+            console.warn(`Failed to index product ${productId}:`, error)
         }
     }
 
     async indexProducts(products: Array<{ id: string; title: string; description: string }>) {
-        if (!this.openai) return
+        await this.ensureInitialized()
+        if (!this.meilisearch || !this.openai) return
 
-        for (const product of products) {
-            await this.indexProduct(product.id, product.title, product.description || "")
+        try {
+            const documents: ProductDocument[] = []
+
+            for (const product of products) {
+                const text = `${product.title} ${product.description || ""}`.toLowerCase()
+                const embedding = await this.generateEmbedding(text)
+
+                documents.push({
+                    id: product.id,
+                    title: product.title,
+                    description: product.description || "",
+                    _vectors: {
+                        default: embedding,
+                    },
+                })
+            }
+
+            const index = this.meilisearch.index(this.indexName)
+            await index.addDocuments(documents, { primaryKey: "id" })
+
+            console.log(`Indexed ${documents.length} products in Meilisearch`)
+        } catch (error) {
+            console.warn("Failed to index products:", error)
         }
     }
 
-    cosineSimilarity(a: number[], b: number[]): number {
-        let dotProduct = 0
-        let normA = 0
-        let normB = 0
+    async searchProducts(query: string, topK: number = 5, semanticRatio: number = 0.9): Promise<string[]> {
+        await this.ensureInitialized()
 
-        for (let i = 0; i < a.length; i++) {
-            dotProduct += a[i] * b[i]
-            normA += a[i] * a[i]
-            normB += b[i] * b[i]
+        if (!this.meilisearch || !this.openai) {
+            throw new Error("Meilisearch and OpenAI must be configured for semantic search")
         }
 
-        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB))
-    }
-
-    async searchProducts(query: string, topK: number = 5): Promise<string[]> {
-        if (!this.openai || productEmbeddings.length === 0) {
-            // Fallback to keyword search
-            return []
-        }
-
+        // Generate embedding for the query
         const queryEmbedding = await this.generateEmbedding(query.toLowerCase())
+        const index = this.meilisearch.index(this.indexName)
 
-        // Calculate similarity scores
-        const scores = productEmbeddings.map(product => ({
-            productId: product.productId,
-            score: this.cosineSimilarity(queryEmbedding, product.embedding)
-        }))
+        // Use hybrid search with custom vector
+        // semanticRatio: 0.0 = pure keyword, 1.0 = pure semantic
+        const results = await index.search(query, {
+            vector: queryEmbedding,
+            hybrid: {
+                semanticRatio: semanticRatio,
+                embedder: "default", // Required field for hybrid search
+            },
+            limit: topK,
+            showRankingScore: true,
+        })
 
-        // Sort by score and return top K
-        scores.sort((a, b) => b.score - a.score)
-        return scores.slice(0, topK).map(s => s.productId)
+        return results.hits.map((hit: any) => hit.id)
     }
 
-    hasEmbeddings(): boolean {
-        return productEmbeddings.length > 0
+    async hasEmbeddings(): Promise<boolean> {
+        await this.ensureInitialized()
+        if (!this.meilisearch) return false
+
+        try {
+            const index = this.meilisearch.index(this.indexName)
+            const stats = await index.getStats()
+            return stats.numberOfDocuments > 0
+        } catch (error) {
+            return false
+        }
     }
 
     isConfigured(): boolean {
-        return this.openai !== null
+        return this.meilisearch !== null && this.openai !== null
     }
 }
 

@@ -140,11 +140,11 @@ export default async function seedDummyJsonData({ container }: ExecArgs) {
                 },
                 prices: [
                     {
-                        amount: Math.round(product.price * 100), // Convert to cents
+                        amount: Math.round(product.price), // Convert to cents
                         currency_code: "usd",
                     },
                     {
-                        amount: Math.round(product.price * 0.85 * 100), // EUR conversion
+                        amount: Math.round(product.price * 0.85), // EUR conversion
                         currency_code: "eur",
                     },
                 ],
@@ -226,4 +226,52 @@ export default async function seedDummyJsonData({ container }: ExecArgs) {
 
     logger.info("Finished seeding DummyJSON products!");
     logger.info(`Total products created: ${createdProducts.length}`);
+
+    // Sync to Meilisearch
+    logger.info("\n=== Syncing to Meilisearch ===");
+    try {
+        const { getVectorSearchService } = await import("../services/vector-search.js");
+        const vectorSearch = getVectorSearchService();
+
+        if (!vectorSearch.isConfigured()) {
+            logger.warn("Meilisearch or OpenAI not configured. Skipping vector indexing.");
+            logger.warn("Set MEILISEARCH_URL and OPENAI_API_KEY to enable semantic search.");
+            return;
+        }
+
+        logger.info("Initializing Meilisearch index...");
+        await vectorSearch.initializeIndex();
+
+        logger.info("Indexing products with embeddings...");
+        const batchSize = 10;
+        let indexed = 0;
+
+        for (let i = 0; i < createdProducts.length; i += batchSize) {
+            const batch = createdProducts.slice(i, i + batchSize);
+
+            const productsToIndex = batch.map((product: any) => ({
+                id: product.id,
+                title: product.title,
+                description: product.description || "",
+            }));
+
+            await vectorSearch.indexProducts(productsToIndex);
+            indexed += batch.length;
+
+            logger.info(`Indexed ${indexed}/${createdProducts.length} products`);
+
+            // Rate limit
+            if (i + batchSize < createdProducts.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+
+        logger.info("✓ Successfully synced all products to Meilisearch!");
+    } catch (error) {
+        logger.warn("Failed to sync to Meilisearch");
+        if (error instanceof Error) {
+            logger.warn(error.message);
+        }
+        logger.warn("You can manually sync later with: yarn sync:meilisearch");
+    }
 }
