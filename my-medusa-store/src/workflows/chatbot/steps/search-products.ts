@@ -5,11 +5,12 @@ import { getVectorSearchService } from "../../../services/vector-search"
 export interface SearchProductsInput {
     query: string
     keywords: string
+    filter?: string
 }
 
 export const searchProductsStep = createStep(
     "search-products-step",
-    async ({ query, keywords }: SearchProductsInput, { container }) => {
+    async ({ query, keywords, filter }: SearchProductsInput, { container }) => {
         const vectorSearch = getVectorSearchService()
         const query_sdk = container.resolve(ContainerRegistrationKeys.REMOTE_QUERY)
 
@@ -37,11 +38,18 @@ export const searchProductsStep = createStep(
 
         // Index products if needed
         if (vectorSearch.isConfigured() && !await vectorSearch.hasEmbeddings() && allProducts.length > 0) {
-            const productsToIndex = allProducts.map(p => ({
-                id: p.id,
-                title: p.title || "",
-                description: p.description || ""
-            }))
+            const productsToIndex = allProducts.map(p => {
+                const variant = p.variants?.[0] as any
+                const price = variant?.calculated_price?.calculated_amount || 0
+
+                return {
+                    id: p.id,
+                    title: p.title || "",
+                    description: p.description || "",
+                    price,
+                    category: (p.metadata?.category as string) || undefined
+                }
+            })
             await vectorSearch.indexProducts(productsToIndex)
         }
 
@@ -50,7 +58,7 @@ export const searchProductsStep = createStep(
             throw new Error("Semantic search is not configured. Please configure Meilisearch and OpenAI.")
         }
 
-        const productIds = await vectorSearch.searchProducts(query, 5)
+        const productIds = await vectorSearch.searchProducts(query, 5, 0.9, filter)
 
         if (productIds.length === 0) {
             return new StepResponse({

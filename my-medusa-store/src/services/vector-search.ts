@@ -4,6 +4,8 @@ interface ProductDocument {
     id: string
     title: string
     description: string
+    price?: number
+    category?: string
     _vectors?: {
         default: number[]
     }
@@ -73,7 +75,7 @@ export class VectorSearchService {
             ])
 
             // Configure filterable attributes
-            await index.updateFilterableAttributes(["id"])
+            await index.updateFilterableAttributes(["id", "price", "category"])
 
             // Configure embedder for hybrid search
             await index.updateEmbedders({
@@ -89,7 +91,7 @@ export class VectorSearchService {
         }
     }
 
-    async indexProduct(productId: string, title: string, description: string) {
+    async indexProduct(productId: string, title: string, description: string, price?: number, category?: string) {
         await this.ensureInitialized()
         if (!this.meilisearch || !this.openai) return
 
@@ -101,6 +103,8 @@ export class VectorSearchService {
                 id: productId,
                 title,
                 description: description || "",
+                price,
+                category,
                 _vectors: {
                     default: embedding,
                 },
@@ -113,7 +117,7 @@ export class VectorSearchService {
         }
     }
 
-    async indexProducts(products: Array<{ id: string; title: string; description: string }>) {
+    async indexProducts(products: Array<{ id: string; title: string; description: string; price?: number; category?: string }>) {
         await this.ensureInitialized()
         if (!this.meilisearch || !this.openai) return
 
@@ -128,6 +132,8 @@ export class VectorSearchService {
                     id: product.id,
                     title: product.title,
                     description: product.description || "",
+                    price: product.price,
+                    category: product.category,
                     _vectors: {
                         default: embedding,
                     },
@@ -143,7 +149,7 @@ export class VectorSearchService {
         }
     }
 
-    async searchProducts(query: string, topK: number = 5, semanticRatio: number = 0.9): Promise<string[]> {
+    async searchProducts(query: string, topK: number = 5, semanticRatio: number = 0.9, filter?: string): Promise<string[]> {
         await this.ensureInitialized()
 
         if (!this.meilisearch || !this.openai) {
@@ -154,7 +160,7 @@ export class VectorSearchService {
         const queryEmbedding = await this.generateEmbedding(query.toLowerCase())
         const index = this.meilisearch.index(this.indexName)
 
-        // Use hybrid search with custom vector
+        // Use hybrid search with custom vector and optional filter
         // semanticRatio: 0.0 = pure keyword, 1.0 = pure semantic
         const results = await index.search(query, {
             vector: queryEmbedding,
@@ -162,9 +168,12 @@ export class VectorSearchService {
                 semanticRatio: semanticRatio,
                 embedder: "default", // Required field for hybrid search
             },
+            filter: filter || undefined,
             limit: topK,
             showRankingScore: true,
         })
+
+        console.log(results, 'results')
 
         return results.hits.map((hit: any) => hit.id)
     }

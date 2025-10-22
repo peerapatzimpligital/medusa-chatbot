@@ -1,5 +1,6 @@
 import { createWorkflow, WorkflowResponse, transform } from "@medusajs/framework/workflows-sdk"
 import { detectIntentStep } from "./steps/detect-intent"
+import { extractFiltersStep } from "./steps/extract-filters"
 import { searchProductsStep } from "./steps/search-products"
 import { formatResponseStep } from "./steps/format-response"
 
@@ -13,15 +14,19 @@ export const chatbotQueryWorkflow = createWorkflow(
         // Step 1: Detect intent
         const intent = detectIntentStep({ query: input.query })
 
-        // Step 2: Search products
-        const searchInput = transform({ intent, query: input.query }, (data) => ({
-            query: data.query,
-            keywords: data.intent.keywords || ""
+        // Step 2: Extract filters (price, category)
+        const filters = extractFiltersStep({ query: input.query })
+
+        // Step 3: Search products with filters
+        const searchInput = transform({ intent, filters }, (data) => ({
+            query: data.filters.cleanQuery,
+            keywords: data.intent.keywords || "",
+            filter: data.filters.priceFilter
         }))
 
         const searchResult = searchProductsStep(searchInput)
 
-        // Step 3: Format response
+        // Step 4: Format response
         const formatInput = transform({ intent, searchResult, query: input.query }, (data) => ({
             query: data.query,
             products: data.searchResult.products,

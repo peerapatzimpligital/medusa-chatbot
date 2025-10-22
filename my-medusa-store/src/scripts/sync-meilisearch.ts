@@ -1,5 +1,5 @@
 import { ExecArgs } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import { ContainerRegistrationKeys, Modules, QueryContext } from "@medusajs/framework/utils";
 import { getVectorSearchService } from "../services/vector-search";
 
 export default async function syncMeilisearch({ container }: ExecArgs) {
@@ -23,10 +23,27 @@ export default async function syncMeilisearch({ container }: ExecArgs) {
             return;
         }
 
-        // Fetch all products
+        // Fetch all products with variants and prices
         logger.info("Fetching products from database...");
-        const products = await productModule.listProducts({}, {
-            relations: ["variants"],
+        const query_sdk = container.resolve(ContainerRegistrationKeys.REMOTE_QUERY);
+
+        const { data: products } = await query_sdk.graph({
+            entity: "product",
+            fields: [
+                "id",
+                "title",
+                "description",
+                "metadata",
+                "variants.id",
+                "variants.calculated_price.*"
+            ],
+            context: {
+                variants: {
+                    calculated_price: QueryContext({
+                        currency_code: "usd",
+                    }),
+                },
+            },
         });
 
         logger.info(`Found ${products.length} products to index`);
@@ -45,16 +62,24 @@ export default async function syncMeilisearch({ container }: ExecArgs) {
 
             logger.info(`Indexing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(products.length / batchSize)}...`);
 
-            const productsToIndex = batch.map(product => ({
-                id: product.id,
-                title: product.title,
-                description: product.description || "",
-            }));
+            const productsToIndex = batch.map(product => {
+                const variant = product.variants?.[0] as any;
+                const price = variant?.calculated_price?.calculated_amount || 0;
+                const category = (product.metadata?.category as string) || undefined;
+
+                return {
+                    id: product.id,
+                    title: product.title,
+                    description: product.description || "",
+                    price,
+                    category
+                };
+            });
 
             await vectorSearch.indexProducts(productsToIndex);
             indexed += batch.length;
 
-            logger.info(`Indexed ${indexed}/${products.length} products`);
+            logger.info(`Indexed ${indexed}/${products.length} products (with price & category)`);
 
             // Rate limit: wait 1 second between batches to avoid OpenAI rate limits
             if (i + batchSize < products.length) {
@@ -71,8 +96,8 @@ export default async function syncMeilisearch({ container }: ExecArgs) {
             logger.error("✗ Failed to verify embeddings in Meilisearch");
         }
 
-        // Test search
-        logger.info("\nTesting semantic search...");
+        // Test semantic search
+        logger.info("\n=== Testing Semantic Search ===");
         const testQuery = "red lipstick";
         logger.info(`Query: "${testQuery}"`);
 
@@ -82,7 +107,27 @@ export default async function syncMeilisearch({ container }: ExecArgs) {
         for (const productId of results) {
             const product = products.find(p => p.id === productId);
             if (product) {
-                logger.info(`  - ${product.title}`);
+                const variant = product.variants?.[0] as any;
+                const price = variant?.calculated_price?.calculated_amount || 0;
+                logger.info(`  - ${product.title} ($${(price / 100).toFixed(2)})`);
+            }
+        }
+
+        // Test price filter search
+        logger.info("\n=== Testing Price Filter Search ===");
+        const priceQuery = "furniture";
+        const priceFilter = "price <= 10000"; // Under $100
+        logger.info(`Query: "${priceQuery}" with filter: ${priceFilter}`);
+
+        const priceResults = await vectorSearch.searchProducts(priceQuery, 3, 0.9, priceFilter);
+        logger.info(`Found ${priceResults.length} results:`);
+
+        for (const productId of priceResults) {
+            const product = products.find(p => p.id === productId);
+            if (product) {
+                const variant = product.variants?.[0] as any;
+                const price = variant?.calculated_price?.calculated_amount || 0;
+                logger.info(`  - ${product.title} ($${(price / 100).toFixed(2)})`);
             }
         }
 
