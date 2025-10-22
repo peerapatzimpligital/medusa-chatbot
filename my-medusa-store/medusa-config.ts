@@ -12,5 +12,23 @@ module.exports = defineConfig({
       jwtSecret: process.env.JWT_SECRET || "supersecret",
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
     }
-  }
+  },
+  modules: [
+    {
+      resolve: "@medusajs/medusa/file",
+      options: {
+        providers: [
+          {
+            resolve: "@medusajs/medusa/file-local",
+            id: "local",
+            options: {
+              //   directory: "uploads", // Optional: change upload directory
+              //  url: "http://localhost:9000/uploads", // Optional: change public URL
+            },
+          },
+        ],
+      },
+    },
+  ],
+
 })

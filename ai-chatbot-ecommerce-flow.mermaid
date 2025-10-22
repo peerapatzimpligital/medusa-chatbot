@@ -1,0 +1,125 @@
+graph TD
+    Start([User Query]) --> ChatUI[Chat Interface with Memory]
+    
+    ChatUI --> CheckContext{Has Conversation<br/>Context?}
+    CheckContext --> |Yes| LoadContext[Load Previous Context]
+    CheckContext --> |No| NewSession[New Session]
+    
+    LoadContext --> LLM[LLM Processes Query + Context]
+    NewSession --> LLM
+    
+    LLM --> Intent{Detect Intent}
+    
+    Intent --> |Product Search| RAG[RAG: Semantic Search]
+    Intent --> |Specific Product| DirectAPI[Direct Medusa API Call]
+    Intent --> |Clarification Needed| AskQuestions[Ask Follow-up Questions]
+    Intent --> |Order Status| OrderTracking[Check Order Status]
+    
+    RAG --> EmbedQuery[Convert Query to Embedding]
+    EmbedQuery --> VectorSearch[Search Vector DB]
+    VectorSearch --> VectorDB[(Vector Database:<br/>Product Embeddings<br/>+Metadata)]
+    
+    VectorDB --> RetrieveProducts[Retrieve Relevant Products]
+    RetrieveProducts --> MedusaAPI1[Medusa API: GET /store/products]
+    MedusaAPI1 --> EnrichData[Enrich with Live Data:<br/>Stock, Price, Variants]
+    
+    DirectAPI --> MedusaAPI2[Medusa API Calls:<br/>GET /products/:id<br/>GET /collections<br/>GET /categories]
+    
+    EnrichData --> FilterSort[Filter & Sort Results]
+    MedusaAPI2 --> FilterSort
+    
+    FilterSort --> EdgeCases{Check Edge Cases}
+    EdgeCases --> |Out of Stock| ShowAlternatives[Suggest Alternatives]
+    EdgeCases --> |Wrong Region| SuggestRegion[Suggest Region Change]
+    EdgeCases --> |All Good| PrepareResponse
+    
+    ShowAlternatives --> PrepareResponse[Prepare Response Data]
+    SuggestRegion --> PrepareResponse
+    
+    PrepareResponse --> LLMResponse[LLM Generates Response]
+    LLMResponse --> VisualCards[Render Visual Product Cards:<br/>- Images<br/>- Price<br/>- Stock Badge<br/>- Quick Add Button]
+    
+    VisualCards --> SaveContext[Save Conversation Context]
+    SaveContext --> UserAction{User Action}
+    
+    AskQuestions --> VisualCards
+    OrderTracking --> MedusaOrder[Medusa API: GET /orders/:id]
+    MedusaOrder --> ShowStatus[Show Fulfillment Status]
+    ShowStatus --> UserAction
+    
+    UserAction --> |Ask More| ChatUI
+    UserAction --> |Add to Cart| CreateCart[Medusa API: POST /store/carts]
+    UserAction --> |Exit| LogAnalytics[Log to Analytics]
+    
+    CreateCart --> CheckCart{Cart Exists?}
+    CheckCart --> |No| NewCart[Create New Cart]
+    CheckCart --> |Yes| UseCart[Use Existing Cart]
+    
+    NewCart --> AddItem[Medusa API: POST /carts/:id/line-items]
+    UseCart --> AddItem
+    
+    AddItem --> ValidateStock{Check Stock}
+    ValidateStock --> |Out of Stock| StockError[Show Error + Alternatives]
+    ValidateStock --> |In Stock| CartSuccess[Item Added Successfully]
+    
+    StockError --> UserAction
+    CartSuccess --> ShowCart[Display Cart with:<br/>- Items<br/>- Subtotal<br/>- Suggested Products]
+    
+    ShowCart --> Continue{Continue Shopping?}
+    Continue --> |Yes| ChatUI
+    Continue --> |No| Checkout[Start Checkout Process]
+    
+    Checkout --> CollectAddress[Collect Shipping Address]
+    CollectAddress --> ValidateAddress[Medusa API: Validate Address]
+    ValidateAddress --> |Invalid| AddressError[Show Error + Help]
+    AddressError --> CollectAddress
+    
+    ValidateAddress --> |Valid| SaveAddress[POST /carts/:id/shipping-address]
+    SaveAddress --> GetShipping[GET /shipping-options]
+    GetShipping --> ShowShipping[Show Shipping Options:<br/>- Standard<br/>- Express<br/>- Prices]
+    
+    ShowShipping --> SelectShipping[User Selects Shipping]
+    SelectShipping --> SetShipping[POST /carts/:id/shipping-methods]
+    
+    SetShipping --> DiscountCode{Apply Discount?}
+    DiscountCode --> |Yes| ApplyDiscount[POST /carts/:id/discounts]
+    DiscountCode --> |No| ShowPayment
+    ApplyDiscount --> ShowPayment[Show Payment Options]
+    
+    ShowPayment --> SelectPayment[User Selects Payment]
+    SelectPayment --> InitPayment[POST /carts/:id/payment-sessions]
+    InitPayment --> AuthPayment[Authorize Payment]
+    
+    AuthPayment --> PaymentResult{Payment Status}
+    PaymentResult --> |Failed| PaymentError[Show Error + Retry]
+    PaymentError --> ShowPayment
+    
+    PaymentResult --> |Success| CompleteOrder[POST /carts/:id/complete]
+    CompleteOrder --> OrderCreated[Order Created Successfully]
+    
+    OrderCreated --> SendConfirmation[Send Confirmation:<br/>- Email<br/>- Chat Message<br/>- Order Details]
+    SendConfirmation --> LogConversion[Log Analytics:<br/>- Conversion<br/>- Revenue<br/>- Products Sold]
+    
+    LogConversion --> Complete([Order Complete])
+    LogAnalytics --> End1([Session End])
+    
+    Analytics[(Admin Dashboard:<br/>- Conversation Logs<br/>- Popular Queries<br/>- Conversion Rate<br/>- Failed Searches<br/>- Revenue Analytics)]
+    
+    LogConversion -.-> Analytics
+    LogAnalytics -.-> Analytics
+    
+    MedusaData[(Medusa Sample Data:<br/>- 100+ Products<br/>- Multiple Variants<br/>- Collections<br/>- Regions<br/>- Payment Providers<br/>- Shipping Options)]
+    
+    MedusaData -.->|Powers| MedusaAPI1
+    MedusaData -.->|Powers| MedusaAPI2
+    
+    style Start fill:#e1f5e1
+    style Complete fill:#e1f5e1
+    style End1 fill:#ffe1e1
+    style RAG fill:#e1e5ff
+    style VectorDB fill:#e1e5ff
+    style LLM fill:#fff4e1
+    style LLMResponse fill:#fff4e1
+    style Analytics fill:#f0e1ff
+    style MedusaData fill:#e1e5ff
+    style VisualCards fill:#fff4e1
