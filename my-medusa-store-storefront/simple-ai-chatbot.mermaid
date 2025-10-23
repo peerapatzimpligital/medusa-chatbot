@@ -1,0 +1,24 @@
+flowchart TD
+    A[User enters keyword to search product] --> B[Show product results]
+    B --> C[User clicks Add to Cart]
+    C --> D{Ask user: Continue shopping, View cart, or Checkout?}
+    
+    D -->|Continue Shopping| A
+    D -->|View Cart| E[Display Cart]
+    E --> D
+    D -->|Proceed to Checkout| F[Ask user to provide address information]
+    
+    F --> G[User provides address information]
+    G --> H{Check if address is complete}
+    
+    H -->|Incomplete| F
+    H -->|Complete| I[Ask user to choose delivery method]
+    
+    I --> J[User selects delivery method]
+    J --> K[Ask user to choose payment method]
+    
+    K --> L[User selects payment method]
+    L --> M[Review cart summary]
+    
+    M --> N[Ask user to complete order]
+    N --> O[Order completed]

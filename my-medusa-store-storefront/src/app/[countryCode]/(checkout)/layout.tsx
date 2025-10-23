@@ -1,6 +1,7 @@
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 import ChevronDown from "@modules/common/icons/chevron-down"
 import MedusaCTA from "@modules/layout/components/medusa-cta"
+import { ChatWidget } from "@modules/chatbot/components/chat-widget"
 
 export default function CheckoutLayout({
   children,
@@ -38,6 +39,7 @@ export default function CheckoutLayout({
       <div className="py-4 w-full flex items-center justify-center">
         <MedusaCTA />
       </div>
+      <ChatWidget />
     </div>
   )
 }

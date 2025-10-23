@@ -5,13 +5,20 @@ export const POST = async (
     req: MedusaRequest,
     res: MedusaResponse
 ) => {
-    const body = req.body as { query: string; conversationId?: string }
-    const { query, conversationId } = body
+    const body = req.body as {
+        query: string
+        conversationId?: string
+        cartItemCount?: number
+    }
+    const { query, conversationId, cartItemCount = 0 } = body
 
     try {
         // Execute the chatbot workflow
         const { result } = await chatbotQueryWorkflow(req.scope).run({
-            input: { query }
+            input: {
+                query,
+                cartItemCount
+            }
         })
 
         res.json({
@@ -19,7 +26,15 @@ export const POST = async (
             message: result.message,
             products: result.products || [],
             intent: result.intent,
-            suggestions: result.suggestions || []
+            suggestions: result.suggestions || [],
+            actions: result.actions || [],
+            showActions: result.showActions || false,
+            addressData: result.addressData || null,
+            hasAddress: result.hasAddress || false,
+            missingFields: result.missingFields || [],
+            needsFollowup: result.needsFollowup || false,
+            followupMessage: result.followupMessage || "",
+            followupSuggestions: result.followupSuggestions || []
         })
     } catch (error) {
         console.error("Chatbot error:", error)

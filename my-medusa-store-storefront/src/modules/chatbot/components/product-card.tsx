@@ -45,6 +45,10 @@ export function ProductCard({ product }: ProductCardProps) {
                     setMessage("✓ Added to cart!")
                     setTimeout(() => setMessage(null), 3000)
 
+                    // Update cart count in localStorage
+                    const currentCount = parseInt(localStorage.getItem("cart_count") || "0")
+                    localStorage.setItem("cart_count", String(currentCount + 1))
+
                     // Trigger a soft refresh to update cart count
                     window.dispatchEvent(new Event("cart-updated"))
                 } else {

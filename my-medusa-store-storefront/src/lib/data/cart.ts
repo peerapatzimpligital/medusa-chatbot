@@ -423,6 +423,51 @@ export async function placeOrder(cartId?: string) {
 }
 
 /**
+ * Completes an order for a cart without redirecting (for chatbot use).
+ * @param cartId - optional - The ID of the cart to place an order for.
+ * @returns The order object if successful, or throws an error.
+ */
+export async function completeOrderWithoutRedirect(cartId?: string) {
+  const id = cartId || (await getCartId())
+
+  if (!id) {
+    throw new Error("No existing cart found when placing an order")
+  }
+
+  const headers = {
+    ...(await getAuthHeaders()),
+  }
+
+  const cartRes = await sdk.store.cart
+    .complete(id, {}, headers)
+    .then(async (cartRes) => {
+      const cartCacheTag = await getCacheTag("carts")
+      revalidateTag(cartCacheTag)
+      return cartRes
+    })
+    .catch(medusaError)
+
+  if (cartRes?.type === "order") {
+    const orderCacheTag = await getCacheTag("orders")
+    revalidateTag(orderCacheTag)
+
+    // Remove cart ID from cookies since order is complete
+    removeCartId()
+    
+    // Return order information instead of redirecting
+    return {
+      success: true,
+      order: cartRes.order,
+      orderId: cartRes.order.id,
+      confirmationUrl: `/${cartRes.order.shipping_address?.country_code?.toLowerCase()}/order/${cartRes.order.id}/confirmed`
+    }
+  }
+
+  // If we get here, the order wasn't completed successfully
+  throw new Error("Order completion failed")
+}
+
+/**
  * Updates the countrycode param and revalidates the regions cache
  * @param regionId
  * @param countryCode

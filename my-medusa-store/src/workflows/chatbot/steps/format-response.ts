@@ -25,6 +25,62 @@ export const formatResponseStep = createStep(
             })
         }
 
+        if (intentType === "delivery_options") {
+            return new StepResponse({
+                message: "I can help you choose the best delivery option for your order. Let me show you the available shipping methods.",
+                products: [],
+                suggestions: ["Show delivery options", "Get delivery recommendation"]
+            })
+        }
+
+        if (intentType === "delivery_recommendation") {
+            return new StepResponse({
+                message: "I'd be happy to recommend the best delivery option for you! Let me analyze the available shipping methods based on your preferences.",
+                products: [],
+                suggestions: ["Fastest delivery", "Cheapest option", "Eco-friendly shipping"]
+            })
+        }
+
+        if (intentType === "payment_options") {
+            return new StepResponse({
+                message: "I can help you choose the best payment method for your order. Let me show you the available payment options.",
+                products: [],
+                suggestions: ["Show payment options", "Get payment recommendation", "Secure payment methods"]
+            })
+        }
+
+        if (intentType === "payment_recommendation") {
+            return new StepResponse({
+                message: "I'd be happy to recommend the best payment method for you! Let me analyze the available payment options based on your preferences.",
+                products: [],
+                suggestions: ["Most secure option", "Fastest payment", "Popular choice", "Simple payment"]
+            })
+        }
+
+        if (intentType === "payment_selection") {
+            return new StepResponse({
+                message: "I can help you select and set up your preferred payment method. Which payment option would you like to use?",
+                products: [],
+                suggestions: ["Credit/Debit Card", "PayPal", "Show all options"]
+            })
+        }
+
+        if (intentType === "order_completion") {
+            return new StepResponse({
+                message: "Great! I can help you complete your order. Let me guide you through the final steps to place your order.",
+                products: [],
+                suggestions: ["Continue to review", "Complete order now", "Check my cart"]
+            })
+        }
+
+        if (intentType === "order_review") {
+            return new StepResponse({
+                message: "Let me show you your order summary so you can review everything before completing your purchase.",
+                products: [],
+                suggestions: ["Review order details", "Continue to payment", "Edit my cart"]
+            })
+        }
+
         const formattedProducts = products.slice(0, 5).map(formatProduct)
 
         let message: string
