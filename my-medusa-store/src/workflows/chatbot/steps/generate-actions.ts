@@ -249,18 +249,18 @@ export const generateActionsStep = createStep(
         // Checkout assistance
         if (intentType === "checkout_help" || intentType === "help") {
             if (cartItemCount > 0) {
-                actions.push({
-                    id: "view_cart",
-                    label: "Review Cart",
-                    action: "view_cart",
-                    variant: "secondary"
-                })
-                actions.push({
-                    id: "checkout",
-                    label: "Continue to Checkout",
-                    action: "checkout",
-                    variant: "primary"
-                })
+                // actions.push({
+                //     id: "view_cart",
+                //     label: "Review Cart",
+                //     action: "view_cart",
+                //     variant: "secondary"
+                // })
+                // actions.push({
+                //     id: "checkout",
+                //     label: "Continue to Checkout",
+                //     action: "checkout",
+                //     variant: "primary"
+                // })
             } else {
                 actions.push({
                     id: "browse_products",

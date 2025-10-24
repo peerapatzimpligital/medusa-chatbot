@@ -31,6 +31,7 @@ interface AddressData {
 
 interface ChatMessageProps {
     message: {
+        id?: string
         type: "user" | "bot"
         content: string
         timestamp: Date
@@ -42,6 +43,7 @@ interface ChatMessageProps {
         hasAddress?: boolean
         missingFields?: string[]
         status?: "sending" | "sent" | "delivered" | "error"
+        isTyping?: boolean
     }
     onSuggestionClick?: (suggestion: string) => void
     onActionClick?: (action: ActionButton) => void
@@ -220,7 +222,7 @@ export function ChatMessage({ message, onSuggestionClick, onActionClick, onAddTo
                 )}
 
                 <span className="text-xs opacity-70 mt-1 block">
-                    {message.timestamp.toLocaleTimeString([], {
+                    {new Date(message.timestamp).toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit'
                     })}

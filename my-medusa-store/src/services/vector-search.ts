@@ -173,7 +173,7 @@ export class VectorSearchService {
             showRankingScore: true,
         })
 
-        console.log(results, 'results')
+
 
         return results.hits.map((hit: any) => hit.id)
     }

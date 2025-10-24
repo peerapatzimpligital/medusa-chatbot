@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import Image from "next/image"
 import { addToCartFromChatbot } from "../actions"
+import { useChatbotStore } from "../store/chatbot-store"
 
 interface Variant {
     id: string
@@ -32,6 +33,7 @@ export function ProductCard({ product }: ProductCardProps) {
     const [selectedVariantId, setSelectedVariantId] = useState(product.variantId)
     const [isPending, startTransition] = useTransition()
     const [message, setMessage] = useState<string | null>(null)
+    const { cartItemCount, setCartItemCount } = useChatbotStore()
 
     const hasMultipleVariants = product.variants && product.variants.length > 1
     const selectedVariant = product.variants?.find(v => v.id === selectedVariantId) || product.variants?.[0]
@@ -45,9 +47,8 @@ export function ProductCard({ product }: ProductCardProps) {
                     setMessage("✓ Added to cart!")
                     setTimeout(() => setMessage(null), 3000)
 
-                    // Update cart count in localStorage
-                    const currentCount = parseInt(localStorage.getItem("cart_count") || "0")
-                    localStorage.setItem("cart_count", String(currentCount + 1))
+                    // Update cart count in Zustand store
+                    setCartItemCount(cartItemCount + 1)
 
                     // Trigger a soft refresh to update cart count
                     window.dispatchEvent(new Event("cart-updated"))

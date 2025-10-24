@@ -25,13 +25,21 @@ export const formatResponseStep = createStep(
             })
         }
 
-        // if (intentType === "delivery_options") {
-        //     return new StepResponse({
-        //         message: "I can help you choose the best delivery option for your order. Let me show you the available shipping methods.",
-        //         products: [],
-        //         suggestions: ["Show delivery options", "Get delivery recommendation"]
-        //     })
-        // }
+        if (intentType === "address_response") {
+            return new StepResponse({
+                message: "Thank you for providing your address information. Let me process that for you.",
+                products: [],
+                suggestions: []
+            })
+        }
+
+        if (intentType === "delivery_options") {
+            return new StepResponse({
+                message: "I can help you choose the best delivery option for your order. Let me show you the available shipping methods.",
+                products: [],
+                suggestions: []
+            })
+        }
 
         if (intentType === "delivery_recommendation") {
             return new StepResponse({
@@ -61,7 +69,7 @@ export const formatResponseStep = createStep(
             return new StepResponse({
                 message: "I can help you select and set up your preferred payment method. Which payment option would you like to use?",
                 products: [],
-                suggestions: ["Credit/Debit Card", "PayPal", "Show all options"]
+                suggestions: []
             })
         }
 

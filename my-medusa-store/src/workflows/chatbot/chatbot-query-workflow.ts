@@ -1,4 +1,4 @@
-import { createWorkflow, WorkflowResponse, transform } from "@medusajs/framework/workflows-sdk"
+import { createWorkflow, WorkflowResponse, transform, when } from "@medusajs/framework/workflows-sdk"
 import { detectIntentStep } from "./steps/detect-intent"
 import { extractFiltersStep } from "./steps/extract-filters"
 import { searchProductsStep } from "./steps/search-products"
@@ -10,34 +10,69 @@ import { generateFollowupStep } from "./steps/generate-followup"
 export interface ChatbotQueryInput {
     query: string
     cartItemCount?: number
+    context?: {
+        isCollectingAddress?: boolean
+        partialAddress?: any
+        recentMessages?: Array<{
+            type: string
+            content: string
+            hasAddress?: boolean
+            addressData?: any
+        }>
+    }
 }
 
 export const chatbotQueryWorkflow = createWorkflow(
     "chatbot-query-workflow",
     (input: ChatbotQueryInput) => {
         // Step 1: Detect intent
-        const intent = detectIntentStep({ query: input.query })
+        const intent = detectIntentStep({ query: input.query, context: input.context })
 
-        // Step 2: Extract filters (price, category)
-        const filters = extractFiltersStep({ query: input.query })
+        // Product search branch - executed only when intent is product_search
+        const productSearchData = when(
+            "product-search-flow",
+            intent,
+            (intentData) => intentData.type === "product_search"
+        ).then(() => {
+            // Step 2 & 3: Extract filters and search products (only for product search intents)
+            const filters = extractFiltersStep({ query: input.query })
 
-        // Step 3: Search products with filters
-        const searchInput = transform({ intent, filters }, (data) => ({
-            query: data.filters.cleanQuery,
-            keywords: data.intent.keywords || "",
-            filter: data.filters.priceFilter
-        }))
+            const searchInput = transform({ intent, filters }, (data) => ({
+                query: data.filters.cleanQuery,
+                keywords: data.intent.keywords || "",
+                filter: data.filters.priceFilter
+            }))
 
-        const searchResult = searchProductsStep(searchInput)
+            const searchResult = searchProductsStep(searchInput)
 
-        // Step 4: Format response
-        const formatInput = transform({ intent, searchResult, query: input.query }, (data) => ({
-            query: data.query,
-            products: data.searchResult.products,
-            searchType: data.searchResult.searchType as "semantic" | "keyword" | "all",
-            totalFound: data.searchResult.totalFound,
-            intentType: data.intent.type
-        }))
+            return transform({ intent, searchResult, query: input.query }, (data) => ({
+                query: data.query,
+                products: data.searchResult.products,
+                searchType: data.searchResult.searchType as "semantic" | "keyword" | "all",
+                totalFound: data.searchResult.totalFound,
+                intentType: data.intent.type
+            }))
+        })
+
+        // Non-product search branch - executed for all other intents
+        const nonProductSearchData = when(
+            "non-product-search-flow",
+            intent,
+            (intentData) => intentData.type !== "product_search"
+        ).then(() => {
+            return transform({ intent, query: input.query }, (data) => ({
+                query: data.query,
+                products: [],
+                searchType: "all" as "semantic" | "keyword" | "all",
+                totalFound: 0,
+                intentType: data.intent.type
+            }))
+        })
+
+        // Combine results from both branches and format response
+        const formatInput = transform({ productSearchData, nonProductSearchData }, (data) => {
+            return data.productSearchData || data.nonProductSearchData
+        })
 
         const response = formatResponseStep(formatInput)
 
@@ -53,9 +88,9 @@ export const chatbotQueryWorkflow = createWorkflow(
         )
 
         // Step 8: Generate contextual action buttons
-        const actionsInput = transform({ intent, searchResult, cartItemCount: input.cartItemCount }, (data) => ({
+        const actionsInput = transform({ intent, response, cartItemCount: input.cartItemCount }, (data) => ({
             intentType: data.intent.type,
-            hasProducts: data.searchResult.products.length > 0,
+            hasProducts: data.response.products.length > 0,
             cartItemCount: data.cartItemCount || 0
         }))
 

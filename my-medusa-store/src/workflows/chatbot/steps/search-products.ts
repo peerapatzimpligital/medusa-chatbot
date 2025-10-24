@@ -11,6 +11,15 @@ export interface SearchProductsInput {
 export const searchProductsStep = createStep(
     "search-products-step",
     async ({ query, keywords, filter }: SearchProductsInput, { container }) => {
+        // Early return for empty queries (non-product intents)
+        if (!query || query.trim() === "") {
+            return new StepResponse({
+                products: [],
+                searchType: "semantic",
+                totalFound: 0
+            })
+        }
+
         const vectorSearch = getVectorSearchService()
         const query_sdk = container.resolve(ContainerRegistrationKeys.REMOTE_QUERY)
 

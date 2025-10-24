@@ -1,5 +1,36 @@
 "use server"
 
+// Type definitions
+type ChatbotResponse<T = any> = {
+    success: boolean
+    error?: string
+    message?: string
+} & T
+
+type DeliveryOption = {
+    id: string
+    name: string
+    description: string
+    amount: number
+    currency_code: string
+    type: string
+}
+
+type PaymentOption = {
+    id: string
+    name: string
+    provider_id: string
+    description: string
+    security_level: string
+    processing_time: string
+    fees: string
+}
+
+type DeliveryPreferences = {
+    priority?: "speed" | "cost" | "eco"
+    budget?: number
+}
+
 import { addToCart, retrieveCart, setShippingMethod, initiatePaymentSession, placeOrder, completeOrderWithoutRedirect } from "@lib/data/cart"
 import { listCartShippingMethods, calculatePriceForShippingOption } from "@lib/data/fulfillment"
 import { listCartPaymentMethods } from "@lib/data/payment"
@@ -87,7 +118,7 @@ export async function getDeliveryOptionsFromChatbot() {
                 return {
                     id: method.id,
                     name: method.name,
-                    description: method.description || "",
+                    description: (method as any).description || method.name || "",
                     amount: calculatedPrice,
                     currency_code: cart.currency_code,
                     type: method.service_zone?.fulfillment_set?.type || "shipping"
@@ -143,7 +174,11 @@ export async function selectDeliveryMethodFromChatbot(shippingMethodId: string) 
 export async function getDeliveryRecommendationFromChatbot(preferences: {
     priority?: "speed" | "cost" | "eco"
     budget?: number
-}) {
+}): Promise<ChatbotResponse<{
+    recommendation?: DeliveryOption
+    allOptions?: DeliveryOption[]
+    reasoning?: string
+}>> {
     try {
         const deliveryResult = await getDeliveryOptionsFromChatbot()
 
@@ -299,7 +334,11 @@ export async function selectPaymentMethodFromChatbot(paymentMethodId: string) {
     }
 }
 
-export async function getPaymentRecommendationFromChatbot(preference?: string) {
+export async function getPaymentRecommendationFromChatbot(preference?: string): Promise<ChatbotResponse<{
+    recommendation?: PaymentOption
+    allOptions?: PaymentOption[]
+    reasoning?: string
+}>> {
     try {
         const paymentOptionsResult = await getPaymentOptionsFromChatbot()
 

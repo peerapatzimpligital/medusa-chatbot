@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import React, { useRef, useEffect } from "react"
 import { ChatMessage } from "./chat-message"
-import { updateCart } from "@lib/data/cart"
+import { updateCart, retrieveCart } from "@lib/data/cart"
 import { 
     getDeliveryOptionsFromChatbot, 
     selectDeliveryMethodFromChatbot, 
@@ -12,6 +12,7 @@ import {
     getPaymentRecommendationFromChatbot,
     completeOrderFromChatbot
 } from "../actions"
+import { useChatbotStore } from "../store/chatbot-store"
 
 interface ActionButton {
     id: string
@@ -50,44 +51,56 @@ interface Message {
 }
 
 export function ChatWidget() {
-    const [isOpen, setIsOpen] = useState(false)
-    const [input, setInput] = useState("")
-    const [isLoading, setIsLoading] = useState(false)
-    const [isTyping, setIsTyping] = useState(false)
-    const [conversationId, setConversationId] = useState<string | null>(null)
-    const [cartItemCount, setCartItemCount] = useState(0)
-    const [collectingAddress, setCollectingAddress] = useState(false)
-    const [partialAddress, setPartialAddress] = useState<AddressData>({})
-    const [quickReplies, setQuickReplies] = useState<string[]>([])
+    // Zustand store
+    const {
+        // UI State
+        isOpen,
+        input,
+        isLoading,
+        isTyping,
+        quickReplies,
+        
+        // Chat State
+        messages,
+        conversationId,
+        
+        // Cart State
+        cartItemCount,
+        
+        // Address Collection State
+        isCollectingAddress,
+        partialAddress,
+        
+        // Actions
+        setIsOpen,
+        setInput,
+        setIsLoading,
+        setIsTyping,
+        setQuickReplies,
+        addMessage,
+        updateMessage,
+        clearMessages,
+        setConversationId,
+        setCartItemCount,
+        setIsCollectingAddress,
+        setPartialAddress,
+        updatePartialAddress,
+        clearPartialAddress,
+        
+        // Order Confirmation Actions
+        setOrderConfirmation,
+        getOrderConfirmation,
+        
+        // Address Data Actions
+        setSavedAddressData,
+        getSavedAddressData,
+        clearSavedAddressData,
+    } = useChatbotStore()
+    
     const messagesEndRef = useRef<HTMLDivElement>(null)
-    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     // Determine welcome message based on current page
     const getWelcomeMessage = () => {
-        if (typeof window !== "undefined") {
-            const path = window.location.pathname
-            const searchParams = new URLSearchParams(window.location.search)
-            const step = searchParams.get("step")
-            
-            if (path.includes("/checkout")) {
-                if (step === "delivery") {
-                    return {
-                        content: "Hi! I can help you choose the best delivery option for your order. Would you like to see all options or get a recommendation? 🚚",
-                        suggestions: ["📦 Show delivery options", "⚡ Recommend fastest delivery", "💰 What's the cheapest option?", "🌍 International shipping"]
-                    }
-                }
-                return {
-                    content: "Hi! Need help with checkout? I can answer questions about shipping, payment, or products. 💳",
-                    suggestions: ["💳 What payment methods do you accept?", "📦 How long is shipping?", "🚚 Help me choose delivery", "🔒 Is checkout secure?"]
-                }
-            }
-            if (path.includes("/cart")) {
-                return {
-                    content: "Hi! Ready to checkout? I can help you find more products or answer any questions. 🛒",
-                    suggestions: ["🔍 Show me similar products", "💰 Do you have any deals?", "✅ Help me complete my order", "🔄 What's your return policy?"]
-                }
-            }
-        }
         return {
             content: "Hi! I'm your AI shopping assistant. I'm here to help you find products, answer questions, and make your shopping experience amazing! ✨",
             suggestions: [
@@ -97,34 +110,6 @@ export function ChatWidget() {
         }
     }
 
-    // Load messages from sessionStorage on mount
-    const loadMessages = () => {
-        if (typeof window !== "undefined") {
-            const saved = sessionStorage.getItem("chatbot_messages")
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved)
-                    return parsed.map((msg: any) => ({
-                        ...msg,
-                        timestamp: new Date(msg.timestamp)
-                    }))
-                } catch (e) {
-                    console.error("Failed to parse saved messages:", e)
-                }
-            }
-        }
-        return [
-            {
-                id: "welcome",
-                type: "bot",
-                ...getWelcomeMessage(),
-                timestamp: new Date()
-            }
-        ]
-    }
-
-    const [messages, setMessages] = useState<Message[]>(loadMessages())
-
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }
@@ -133,57 +118,7 @@ export function ChatWidget() {
         scrollToBottom()
     }, [messages])
 
-    // Save messages to sessionStorage whenever they change
-    useEffect(() => {
-        if (typeof window !== "undefined" && messages.length > 0) {
-            sessionStorage.setItem("chatbot_messages", JSON.stringify(messages))
-        }
-    }, [messages])
 
-    // Load conversation ID from sessionStorage
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            const savedConvId = sessionStorage.getItem("chatbot_conversation_id")
-            if (savedConvId) {
-                setConversationId(savedConvId)
-            }
-
-            const savedPartialAddress = sessionStorage.getItem("chatbot_partial_address")
-            if (savedPartialAddress) {
-                try {
-                    setPartialAddress(JSON.parse(savedPartialAddress))
-                } catch (e) {
-                    console.error("Failed to parse partial address:", e)
-                }
-            }
-
-            const savedCollecting = sessionStorage.getItem("chatbot_collecting_address")
-            if (savedCollecting === "true") {
-                setCollectingAddress(true)
-            }
-        }
-    }, [])
-
-    // Save conversation ID to sessionStorage
-    useEffect(() => {
-        if (conversationId && typeof window !== "undefined") {
-            sessionStorage.setItem("chatbot_conversation_id", conversationId)
-        }
-    }, [conversationId])
-
-    // Save partial address to sessionStorage
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            sessionStorage.setItem("chatbot_partial_address", JSON.stringify(partialAddress))
-        }
-    }, [partialAddress])
-
-    // Save collecting state to sessionStorage
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            sessionStorage.setItem("chatbot_collecting_address", String(collectingAddress))
-        }
-    }, [collectingAddress])
 
     const sendMessage = async (text: string) => {
         if (!text.trim()) return
@@ -209,7 +144,7 @@ export function ChatWidget() {
                 timestamp: new Date(),
                 status: "delivered"
             }
-            setMessages(prev => [...prev, userMessage])
+            addMessage(userMessage)
             setInput("")
             setQuickReplies([])
 
@@ -226,7 +161,7 @@ export function ChatWidget() {
             status: "sending"
         }
 
-        setMessages(prev => [...prev, userMessage])
+        addMessage(userMessage)
         setInput("")
         setQuickReplies([]) // Clear quick replies when user sends a message
         setIsLoading(true)
@@ -238,11 +173,7 @@ export function ChatWidget() {
 
         // Update message status to sent
         setTimeout(() => {
-            setMessages(prev => prev.map(msg => 
-                msg.id === userMessage.id 
-                    ? { ...msg, status: "sent" }
-                    : msg
-            ))
+            updateMessage(userMessage.id, { status: "sent" })
         }, 100)
 
         try {
@@ -252,7 +183,18 @@ export function ChatWidget() {
                 body: JSON.stringify({
                     query: text,
                     conversationId,
-                    cartItemCount
+                    cartItemCount,
+                    // Add conversation context
+                    context: {
+                        isCollectingAddress,
+                        partialAddress,
+                        recentMessages: messages.slice(-5).map(msg => ({
+                            type: msg.type,
+                            content: msg.content,
+                            hasAddress: msg.hasAddress,
+                            addressData: msg.addressData
+                        }))
+                    }
                 })
             })
 
@@ -266,11 +208,7 @@ export function ChatWidget() {
             setIsTyping(false)
             
             // Update user message status to delivered
-            setMessages(prev => prev.map(msg => 
-                msg.id === userMessage.id 
-                    ? { ...msg, status: "delivered" }
-                    : msg
-            ))
+            updateMessage(userMessage.id, { status: "delivered" })
 
             // Add bot message with a slight delay for natural feel
             setTimeout(() => {
@@ -289,15 +227,13 @@ export function ChatWidget() {
                     status: "delivered"
                 }
 
-                setMessages(prev => [...prev, botMessage])
+                addMessage(botMessage)
                 
                 // Set smart quick replies based on context
                 if (data.suggestions && data.suggestions.length > 0) {
                     setQuickReplies(data.suggestions.slice(0, 3)) // Show max 3 quick replies
                 } else {
-                    // Generate contextual quick replies
-                    const contextualReplies = generateContextualQuickReplies(data.message, data.products)
-                    setQuickReplies(contextualReplies)
+                    setQuickReplies([])
                 }
             }, 500)
 
@@ -309,7 +245,7 @@ export function ChatWidget() {
 
                 if (data.needsFollowup && data.followupMessage) {
                     // Ask for missing fields
-                    setCollectingAddress(true)
+                    setIsCollectingAddress(true)
                     const followupMsg: Message = {
                         id: (Date.now() + 2).toString(),
                         type: "bot",
@@ -318,14 +254,14 @@ export function ChatWidget() {
                         timestamp: new Date()
                     }
                     setTimeout(() => {
-                        setMessages(prev => [...prev, followupMsg])
+                        addMessage(followupMsg)
                     }, 500)
                 } else {
                     // All fields collected, offer to fill form
-                    setCollectingAddress(false)
+                    setIsCollectingAddress(false)
                     handleAddressExtraction(mergedAddress, data.missingFields || [])
                 }
-            } else if (collectingAddress && data.addressData) {
+            } else if (isCollectingAddress && data.addressData) {
                 // Continue collecting missing fields
                 const mergedAddress = { ...partialAddress, ...data.addressData }
                 setPartialAddress(mergedAddress)
@@ -339,11 +275,11 @@ export function ChatWidget() {
                         timestamp: new Date()
                     }
                     setTimeout(() => {
-                        setMessages(prev => [...prev, followupMsg])
+                        addMessage(followupMsg)
                     }, 500)
                 } else {
                     // All fields collected
-                    setCollectingAddress(false)
+                    setIsCollectingAddress(false)
                     handleAddressExtraction(mergedAddress, [])
                 }
             }
@@ -351,11 +287,7 @@ export function ChatWidget() {
             setIsTyping(false)
             
             // Update user message status to error
-            setMessages(prev => prev.map(msg => 
-                msg.id === userMessage.id 
-                    ? { ...msg, status: "error" }
-                    : msg
-            ))
+            updateMessage(userMessage.id, { status: "error" })
             
             const errorMessage: Message = {
                 id: (Date.now() + 1).toString(),
@@ -364,7 +296,7 @@ export function ChatWidget() {
                 timestamp: new Date(),
                 status: "delivered"
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
             
             // Set retry quick replies
             setQuickReplies(["Try again", "Help", "Start over"])
@@ -373,31 +305,7 @@ export function ChatWidget() {
         }
     }
 
-    // Generate contextual quick replies based on message content and context
-    const generateContextualQuickReplies = (message: string, products?: any[]): string[] => {
-        const replies: string[] = []
-        
-        // Always include Complete My Order as a primary option if cart has items
-        // if (cartItemCount > 0) {
-        //     replies.push("✅ Complete My Order")
-        // }
-        
-        // if (products && products.length > 0) {
-        //     replies.push("🔍 Show more products", "🛒 Add to cart")
-        // } else if (message.toLowerCase().includes("cart")) {
-        //     replies.push("👀 View cart", "🛒 Continue shopping")
-        // } else if (message.toLowerCase().includes("order")) {
-        //     replies.push("📦 Track order", "📋 Order history")
-        // } else if (message.toLowerCase().includes("shipping") || message.toLowerCase().includes("delivery")) {
-        //     replies.push("🚚 Shipping options", "⏰ Delivery time")
-        // } else if (message.toLowerCase().includes("payment")) {
-        //     replies.push("💳 Payment methods", "🔒 Secure checkout")
-        // } else {
-        //     replies.push("🔥 Popular products", "💰 Deals")
-        // }
-        
-        return replies.slice(0, 3) // Return max 3 replies
-    }
+
 
     const handleSuggestionClick = (suggestion: string) => {
         sendMessage(suggestion)
@@ -424,12 +332,6 @@ export function ChatWidget() {
                             action: "complete_order_now",
                             variant: "primary"
                         },
-                        // {
-                        //     id: "view_cart",
-                        //     label: "View Cart",
-                        //     action: "view_cart",
-                        //     variant: "outline"
-                        // },
                         {
                             id: "continue_shopping",
                             label: "Continue Shopping",
@@ -440,10 +342,10 @@ export function ChatWidget() {
                     showActions: true,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, successMessage])
+                addMessage(successMessage)
                 
                 // Update cart count
-                setCartItemCount(prev => prev + 1)
+                setCartItemCount(cartItemCount + 1)
             } else {
                 throw new Error(result.error || "Failed to add to cart")
             }
@@ -455,7 +357,7 @@ export function ChatWidget() {
                 content: `❌ Sorry, I couldn't add "${product.title}" to your cart. Please try again.`,
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
         }
     }
 
@@ -484,7 +386,7 @@ Which delivery method would you prefer?`,
                     showActions: true,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, optionsMessage])
+                addMessage(optionsMessage)
             } else {
                 const errorMessage: Message = {
                     id: Date.now().toString(),
@@ -492,7 +394,7 @@ Which delivery method would you prefer?`,
                     content: result.error || "Sorry, I couldn't retrieve delivery options. Please try again.",
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, errorMessage])
+                addMessage(errorMessage)
             }
         } catch (error) {
             console.error("Error getting delivery options:", error)
@@ -502,7 +404,7 @@ Which delivery method would you prefer?`,
                 content: "Sorry, there was an error getting delivery options. Please try again.",
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
         }
     }
 
@@ -521,18 +423,12 @@ Which delivery method would you prefer?`,
                             label: "Proceed to Payment",
                             action: "proceed_to_payment",
                             variant: "primary"
-                        },
-                        // {
-                        //     id: "view_cart",
-                        //     label: "View Cart",
-                        //     action: "view_cart",
-                        //     variant: "outline"
-                        // }
+                        }
                     ],
                     showActions: true,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, successMessage])
+                addMessage(successMessage)
             } else {
                 const errorMessage: Message = {
                     id: Date.now().toString(),
@@ -540,7 +436,7 @@ Which delivery method would you prefer?`,
                     content: `❌ ${result.error}`,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, errorMessage])
+                addMessage(errorMessage)
             }
         } catch (error) {
             console.error("Error selecting delivery method:", error)
@@ -550,7 +446,7 @@ Which delivery method would you prefer?`,
                 content: "Sorry, there was an error selecting the delivery method. Please try again.",
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
         }
     }
 
@@ -586,7 +482,7 @@ Would you like to select this option?`,
                     showActions: true,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, recommendationMessage])
+                addMessage(recommendationMessage)
             } else {
                 const errorMessage: Message = {
                     id: Date.now().toString(),
@@ -594,7 +490,7 @@ Would you like to select this option?`,
                     content: result.error || "Sorry, I couldn't get a delivery recommendation. Please try again.",
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, errorMessage])
+                addMessage(errorMessage)
             }
         } catch (error) {
             console.error("Error getting delivery recommendation:", error)
@@ -604,7 +500,7 @@ Would you like to select this option?`,
                 content: "Sorry, there was an error getting a delivery recommendation. Please try again.",
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
         }
     }
 
@@ -613,6 +509,45 @@ Would you like to select this option?`,
             style: 'currency',
             currency: currency.toUpperCase()
         }).format(amount)
+    }
+
+    const formatCartSummary = (cart: any): string => {
+        if (!cart || !cart.items || cart.items.length === 0) {
+            return "Your cart is empty."
+        }
+
+        let summary = "🛒 **Cart Summary**\n\n"
+        
+        // Add items
+        cart.items.forEach((item: any, index: number) => {
+            const itemTotal = item.unit_price * item.quantity
+            summary += `${index + 1}. **${item.product_title}**\n`
+            if (item.variant_title && item.variant_title !== "Default Variant") {
+                summary += `   Variant: ${item.variant_title}\n`
+            }
+            summary += `   Quantity: ${item.quantity} × ${formatPrice(item.unit_price, cart.currency_code)}\n`
+            summary += `   Subtotal: ${formatPrice(itemTotal, cart.currency_code)}\n\n`
+        })
+
+        // Add totals
+        summary += "---\n"
+        summary += `**Subtotal:** ${formatPrice(cart.subtotal || 0, cart.currency_code)}\n`
+        
+        if (cart.shipping_total && cart.shipping_total > 0) {
+            summary += `**Shipping:** ${formatPrice(cart.shipping_total, cart.currency_code)}\n`
+        }
+        
+        if (cart.tax_total && cart.tax_total > 0) {
+            summary += `**Tax:** ${formatPrice(cart.tax_total, cart.currency_code)}\n`
+        }
+        
+        if (cart.discount_total && cart.discount_total > 0) {
+            summary += `**Discount:** -${formatPrice(cart.discount_total, cart.currency_code)}\n`
+        }
+        
+        summary += `**Total:** ${formatPrice(cart.total || 0, cart.currency_code)}\n`
+        
+        return summary
     }
 
     const handlePaymentOptions = async () => {
@@ -628,9 +563,9 @@ Would you like to select this option?`,
 ${result.paymentOptions.map((option, index) => 
     `${index + 1}. **${option.name}**
    ${option.description}
-   Security: ${option.security}
+   Security: ${option.security_level}
    Processing: ${option.processing_time}
-   ${option.fee ? `Fee: ${option.fee}` : 'No additional fees'}`
+   ${option.fees ? `Fee: ${option.fees}` : 'No additional fees'}`
 ).join('\n\n')}
 
 Which payment method would you prefer?`,
@@ -643,7 +578,7 @@ Which payment method would you prefer?`,
                     showActions: true,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, optionsMessage])
+                addMessage(optionsMessage)
             } else {
                 const errorMessage: Message = {
                     id: Date.now().toString(),
@@ -651,7 +586,7 @@ Which payment method would you prefer?`,
                     content: result.error || "Sorry, I couldn't retrieve payment options. Please try again.",
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, errorMessage])
+                addMessage(errorMessage)
             }
         } catch (error) {
             console.error("Error getting payment options:", error)
@@ -661,13 +596,13 @@ Which payment method would you prefer?`,
                 content: "Sorry, there was an error getting payment options. Please try again.",
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
         }
     }
 
-    const handlePaymentRecommendation = async (preference: "secure" | "fast" | "popular" | "simple" = "secure") => {
+    const handlePaymentRecommendation = async (preference : string) => {
         try {
-            const result = await getPaymentRecommendationFromChatbot({ preference })
+            const result = await getPaymentRecommendationFromChatbot(preference)
             
             if (result.success && result.recommendation) {
                 const recommendationMessage: Message = {
@@ -677,9 +612,9 @@ Which payment method would you prefer?`,
 
 **${result.recommendation.name}**
 ${result.recommendation.description}
-Security: ${result.recommendation.security}
+Security: ${result.recommendation.security_level}
 Processing: ${result.recommendation.processing_time}
-${result.recommendation.fee ? `Fee: ${result.recommendation.fee}` : 'No additional fees'}
+${result.recommendation.fees ? `Fee: ${result.recommendation.fees}` : 'No additional fees'}
 
 Would you like to select this payment method?`,
                     actions: [
@@ -699,7 +634,7 @@ Would you like to select this payment method?`,
                     showActions: true,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, recommendationMessage])
+                addMessage(recommendationMessage)
             } else {
                 const errorMessage: Message = {
                     id: Date.now().toString(),
@@ -707,7 +642,7 @@ Would you like to select this payment method?`,
                     content: result.error || "Sorry, I couldn't get a payment recommendation. Please try again.",
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, errorMessage])
+                addMessage(errorMessage)
             }
         } catch (error) {
             console.error("Error getting payment recommendation:", error)
@@ -717,7 +652,7 @@ Would you like to select this payment method?`,
                 content: "Sorry, there was an error getting a payment recommendation. Please try again.",
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
         }
     }
 
@@ -739,7 +674,7 @@ Would you like to select this payment method?`,
                     showActions: true,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, selectionMessage])
+                addMessage(selectionMessage)
             } else {
                 const errorMessage: Message = {
                     id: Date.now().toString(),
@@ -747,7 +682,7 @@ Would you like to select this payment method?`,
                     content: result.error || "Sorry, I couldn't retrieve payment options. Please try again.",
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, errorMessage])
+                addMessage(errorMessage)
             }
         } catch (error) {
             console.error("Error getting payment options:", error)
@@ -757,7 +692,7 @@ Would you like to select this payment method?`,
                 content: "Sorry, there was an error getting payment options. Please try again.",
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
         }
     }
 
@@ -766,28 +701,75 @@ Would you like to select this payment method?`,
             const result = await selectPaymentMethodFromChatbot(paymentProviderId)
             
             if (result.success) {
+                // First, show payment method selection success
                 const successMessage: Message = {
                     id: Date.now().toString(),
                     type: "bot",
                     content: `✅ ${result.message}`,
-                    actions: [
-                        {
-                            id: "complete_order_now",
-                            label: "Complete Payment",
-                            action: "complete_order_now",
-                            variant: "primary"
-                        },
-                        // {
-                        //     id: "view_cart",
-                        //     label: "View Cart",
-                        //     action: "view_cart",
-                        //     variant: "outline"
-                        // }
-                    ],
-                    showActions: true,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, successMessage])
+                addMessage(successMessage)
+
+                // Then, retrieve and display cart summary
+                try {
+                    const cart = await retrieveCart()
+                    if (cart) {
+                        const cartSummary = formatCartSummary(cart)
+                        const cartSummaryMessage: Message = {
+                            id: Date.now().toString(),
+                            type: "bot",
+                            content: cartSummary,
+                            actions: [
+                                {
+                                    id: "complete_order_now",
+                                    label: "Complete Payment",
+                                    action: "complete_order_now",
+                                    variant: "primary"
+                                }
+                            ],
+                            showActions: true,
+                            timestamp: new Date()
+                        }
+                        addMessage(cartSummaryMessage)
+                    } else {
+                        // Fallback if cart can't be retrieved
+                        const fallbackMessage: Message = {
+                            id: Date.now().toString(),
+                            type: "bot",
+                            content: "Ready to complete your order!",
+                            actions: [
+                                {
+                                    id: "complete_order_now",
+                                    label: "Complete Payment",
+                                    action: "complete_order_now",
+                                    variant: "primary"
+                                }
+                            ],
+                            showActions: true,
+                            timestamp: new Date()
+                        }
+                        addMessage(fallbackMessage)
+                    }
+                } catch (cartError) {
+                    console.error("Error retrieving cart for summary:", cartError)
+                    // Fallback message if cart retrieval fails
+                    const fallbackMessage: Message = {
+                        id: Date.now().toString(),
+                        type: "bot",
+                        content: "Ready to complete your order!",
+                        actions: [
+                            {
+                                id: "complete_order_now",
+                                label: "Complete Payment",
+                                action: "complete_order_now",
+                                variant: "primary"
+                            }
+                        ],
+                        showActions: true,
+                        timestamp: new Date()
+                    }
+                    addMessage(fallbackMessage)
+                }
             } else {
                 const errorMessage: Message = {
                     id: Date.now().toString(),
@@ -795,7 +777,7 @@ Would you like to select this payment method?`,
                     content: `❌ ${result.error}`,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, errorMessage])
+                addMessage(errorMessage)
             }
         } catch (error) {
             console.error("Error selecting payment method:", error)
@@ -805,7 +787,7 @@ Would you like to select this payment method?`,
                 content: "Sorry, there was an error selecting the payment method. Please try again.",
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
         }
     }
 
@@ -837,11 +819,11 @@ Would you like to select this payment method?`,
                     showActions: true,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, successMessage])
+                addMessage(successMessage)
                 
                 // Store the confirmation URL for the view order action
                 if (result.confirmationUrl) {
-                    localStorage.setItem(`order_confirmation_${result.orderId}`, result.confirmationUrl)
+                    setOrderConfirmation(result.orderId, result.confirmationUrl)
                 }
             } else {
                 // Provide specific actions based on the error type
@@ -855,12 +837,12 @@ Would you like to select this payment method?`,
                             action: "provide_address",
                             variant: "primary"
                         },
-                        {
-                            id: "go_to_checkout",
-                            label: "Go to Checkout",
-                            action: "proceed_to_checkout",
-                            variant: "outline"
-                        }
+                        // {
+                        //     id: "go_to_checkout",
+                        //     label: "Go to Checkout",
+                        //     action: "proceed_to_checkout",
+                        //     variant: "outline"
+                        // }
                     ]
                 } else if (result.error?.includes("delivery method")) {
                     actions = [
@@ -870,12 +852,12 @@ Would you like to select this payment method?`,
                             action: "view_delivery_options",
                             variant: "primary"
                         },
-                        {
-                            id: "go_to_checkout",
-                            label: "Go to Checkout",
-                            action: "proceed_to_checkout",
-                            variant: "outline"
-                        }
+                        // {
+                        //     id: "go_to_checkout",
+                        //     label: "Go to Checkout",
+                        //     action: "proceed_to_checkout",
+                        //     variant: "outline"
+                        // }
                     ]
                 } else if (result.error?.includes("payment method")) {
                     actions = [
@@ -885,12 +867,12 @@ Would you like to select this payment method?`,
                             action: "view_payment_options",
                             variant: "primary"
                         },
-                        {
-                            id: "go_to_checkout",
-                            label: "Go to Checkout",
-                            action: "proceed_to_checkout",
-                            variant: "outline"
-                        }
+                        // {
+                        //     id: "go_to_checkout",
+                        //     label: "Go to Checkout",
+                        //     action: "proceed_to_checkout",
+                        //     variant: "outline"
+                        // }
                     ]
                 } else {
                     actions = [
@@ -913,11 +895,11 @@ Would you like to select this payment method?`,
                     id: Date.now().toString(),
                     type: "bot",
                     content: `${result.error}`,
-                    actions: actions,
+                    actions: actions as ActionButton[],
                     showActions: true,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, errorMessage])
+                addMessage(errorMessage)
             }
         } catch (error) {
             console.error("Error completing order:", error)
@@ -942,13 +924,13 @@ Would you like to select this payment method?`,
                 showActions: true,
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
         }
     }
 
     const handleAddressExtraction = (addressData: AddressData, missingFields: string[]) => {
-        // Store address data in localStorage for form auto-fill
-        localStorage.setItem("chatbot_address_data", JSON.stringify(addressData))
+        // Store address data in Zustand store for form auto-fill
+        setSavedAddressData(addressData)
 
         // Trigger event to notify checkout form
         window.dispatchEvent(new CustomEvent("address-extracted", {
@@ -979,7 +961,7 @@ Would you like to select this payment method?`,
         }
 
         setTimeout(() => {
-            setMessages(prev => [...prev, followUpMessage])
+            addMessage(followUpMessage)
         }, 500)
     }
 
@@ -1019,14 +1001,14 @@ Would you like to select this payment method?`,
                         showActions: true,
                         timestamp: new Date()
                     }
-                    setMessages(prev => [...prev, addressPrompt])
+                    addMessage(addressPrompt)
                 } else {
                     // Already have address, proceed to checkout
                     window.location.href = "/checkout?step=address"
                 }
                 break
             case "provide_address":
-                setCollectingAddress(true)
+                setIsCollectingAddress(true)
                 const addressQuestion: Message = {
                     id: Date.now().toString(),
                     type: "bot",
@@ -1036,7 +1018,7 @@ Would you like to select this payment method?`,
                     ],
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, addressQuestion])
+                addMessage(addressQuestion)
                 break
             case "skip_address":
                 window.location.href = "/checkout?step=address"
@@ -1045,9 +1027,8 @@ Would you like to select this payment method?`,
                 window.location.href = "/store"
                 break
             case "fill_form":
-                const addressDataStr = localStorage.getItem("chatbot_address_data")
-                if (addressDataStr) {
-                    const addressData = JSON.parse(addressDataStr)
+                const addressData = getSavedAddressData()
+                if (addressData) {
                     console.log("Address data to fill:", addressData)
 
                     // Small delay to ensure page is fully loaded
@@ -1055,7 +1036,7 @@ Would you like to select this payment method?`,
                         fillCheckoutForm(addressData)
                     }, 100)
 
-                    localStorage.removeItem("chatbot_address_data")
+                    clearSavedAddressData()
                 } else {
                     const errorMsg: Message = {
                         id: Date.now().toString(),
@@ -1063,22 +1044,22 @@ Would you like to select this payment method?`,
                         content: "⚠️ No address data found. Please provide your address first.",
                         timestamp: new Date()
                     }
-                    setMessages(prev => [...prev, errorMsg])
+                    addMessage(errorMsg)
                 }
                 break
             case "manual_entry":
-                localStorage.removeItem("chatbot_address_data")
+                clearSavedAddressData()
                 sessionStorage.removeItem("chatbot_partial_address")
                 sessionStorage.setItem("chatbot_collecting_address", "false")
                 setPartialAddress({})
-                setCollectingAddress(false)
+                setIsCollectingAddress(false)
                 const message: Message = {
                     id: Date.now().toString(),
                     type: "bot",
                     content: "No problem! Let me know if you need any help.",
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, message])
+                addMessage(message)
                 break
             case "clear_chat":
                 // Clear all chat data
@@ -1086,18 +1067,17 @@ Would you like to select this payment method?`,
                 sessionStorage.removeItem("chatbot_conversation_id")
                 sessionStorage.removeItem("chatbot_partial_address")
                 sessionStorage.removeItem("chatbot_collecting_address")
-                localStorage.removeItem("chatbot_address_data")
-                setMessages([
-                    {
-                        id: "welcome",
-                        type: "bot",
-                        ...getWelcomeMessage(),
-                        timestamp: new Date()
-                    }
-                ])
+                clearSavedAddressData()
+                clearMessages()
+                addMessage({
+                    id: "welcome",
+                    type: "bot",
+                    ...getWelcomeMessage(),
+                    timestamp: new Date()
+                })
                 setConversationId(null)
                 setPartialAddress({})
-                setCollectingAddress(false)
+                setIsCollectingAddress(false)
                 break
             case "view_delivery_options":
                 handleDeliveryOptions()
@@ -1146,7 +1126,7 @@ Would you like to select this payment method?`,
                 // Check if it's a view order action
                 else if (action.startsWith("view_order_")) {
                     const orderId = action.replace("view_order_", "")
-                    const confirmationUrl = localStorage.getItem(`order_confirmation_${orderId}`)
+                    const confirmationUrl = getOrderConfirmation(orderId)
                     if (confirmationUrl) {
                         window.location.href = confirmationUrl
                     } else {
@@ -1187,7 +1167,7 @@ Would you like to select this payment method?`,
                 showActions: true,
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, deliveryMessage])
+            addMessage(deliveryMessage)
             return
         }
 
@@ -1217,7 +1197,7 @@ Would you like to select this payment method?`,
             showActions: true,
             timestamp: new Date()
         }
-        setMessages(prev => [...prev, deliveryMessage])
+        addMessage(deliveryMessage)
     }
 
     const fillViaAPI = async (addressData: AddressData): Promise<boolean> => {
@@ -1279,20 +1259,6 @@ Would you like to select this payment method?`,
 
                 console.log("Cart updated successfully:", updatedCart)
 
-                // Show success message
-                const successMessage: Message = {
-                    id: Date.now().toString(),
-                    type: "bot",
-                    content: "✅ Address saved successfully! The page will refresh to show your updated information.",
-                    timestamp: new Date()
-                }
-                setMessages(prev => [...prev, successMessage])
-
-                // Refresh the page to show updated address
-                // setTimeout(() => {
-                //     window.location.reload()
-                // }, 1500)
-
                 return true
             } catch (error: any) {
                 console.error("Cart update error:", error)
@@ -1310,7 +1276,7 @@ Would you like to select this payment method?`,
                     content: `⚠️ ${errorMessage}`,
                     timestamp: new Date()
                 }
-                setMessages(prev => [...prev, botErrorMessage])
+                addMessage(botErrorMessage)
                 return false
             }
 
@@ -1324,7 +1290,7 @@ Would you like to select this payment method?`,
                 content: "⚠️ Network error occurred. Please check your connection and try again.",
                 timestamp: new Date()
             }
-            setMessages(prev => [...prev, errorMessage])
+            addMessage(errorMessage)
             return false
         }
     }
@@ -1496,16 +1462,19 @@ Would you like to select this payment method?`,
                 : "⚠️ I couldn't find the form fields. Please make sure you're on the checkout page and try again.",
             timestamp: new Date()
         }
-        setMessages(prev => [...prev, successMessage])
+        addMessage(successMessage)
 
         console.log(`Filled ${filledCount} fields`)
     }
 
-    // Load cart count from localStorage or API
+    // Load cart count from API if not already set in store
     useEffect(() => {
         const loadCartCount = () => {
-            const count = parseInt(localStorage.getItem("cart_count") || "0")
-            setCartItemCount(count)
+            // If cart count is 0, try to load from API or initialize
+            if (cartItemCount === 0) {
+                // You could fetch from API here if needed
+                // For now, we'll keep the current store value
+            }
         }
 
         loadCartCount()
@@ -1568,7 +1537,7 @@ Would you like to select this payment method?`,
                         {messages.map((message) => (
                             <ChatMessage 
                                 key={message.id} 
-                                message={message} 
+                                message={{ ...message, addressData: message.addressData ?? undefined }}
                                 onSuggestionClick={handleSuggestionClick}
                                 onActionClick={(action) => handleActionClick(action.action)}
                                 onAddToCart={handleAddToCart}

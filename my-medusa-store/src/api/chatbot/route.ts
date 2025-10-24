@@ -9,15 +9,26 @@ export const POST = async (
         query: string
         conversationId?: string
         cartItemCount?: number
+        context?: {
+            isCollectingAddress?: boolean
+            partialAddress?: any
+            recentMessages?: Array<{
+                type: string
+                content: string
+                hasAddress?: boolean
+                addressData?: any
+            }>
+        }
     }
-    const { query, conversationId, cartItemCount = 0 } = body
+    const { query, conversationId, cartItemCount = 0, context } = body
 
     try {
         // Execute the chatbot workflow
         const { result } = await chatbotQueryWorkflow(req.scope).run({
             input: {
                 query,
-                cartItemCount
+                cartItemCount,
+                context
             }
         })
 
