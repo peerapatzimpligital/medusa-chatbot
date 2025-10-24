@@ -33,16 +33,16 @@ export const generateActionsStep = createStep(
             })
 
             if (cartItemCount > 0) {
+                // actions.push({
+                //     id: "view_cart",
+                //     label: `View Cart (${cartItemCount})`,
+                //     action: "view_cart",
+                //     variant: "secondary"
+                // })
                 actions.push({
-                    id: "view_cart",
-                    label: `View Cart (${cartItemCount})`,
-                    action: "view_cart",
-                    variant: "secondary"
-                })
-                actions.push({
-                    id: "checkout",
-                    label: "Proceed to Checkout",
-                    action: "checkout",
+                    id: "complete_order_now",
+                    label: "Complete Order Now",
+                    action: "complete_order_now",
                     variant: "primary"
                 })
             }
@@ -56,16 +56,16 @@ export const generateActionsStep = createStep(
                 action: "continue_shopping",
                 variant: "outline"
             })
+            // actions.push({
+            //     id: "view_cart",
+            //     label: `View Cart (${cartItemCount})`,
+            //     action: "view_cart",
+            //     variant: "secondary"
+            // })
             actions.push({
-                id: "view_cart",
-                label: `View Cart (${cartItemCount})`,
-                action: "view_cart",
-                variant: "secondary"
-            })
-            actions.push({
-                id: "checkout",
-                label: "Proceed to Checkout",
-                action: "checkout",
+                id: "complete_order_now",
+                label: "Complete Order Now",
+                action: "complete_order_now",
                 variant: "primary"
             })
         }
@@ -79,9 +79,9 @@ export const generateActionsStep = createStep(
                 variant: "outline"
             })
             actions.push({
-                id: "checkout",
-                label: "Proceed to Checkout",
-                action: "checkout",
+                id: "complete_order_now",
+                label: "Complete Order Now",
+                action: "complete_order_now",
                 variant: "primary"
             })
         }
@@ -95,12 +95,12 @@ export const generateActionsStep = createStep(
                 variant: "primary"
             })
             if (cartItemCount > 0) {
-                actions.push({
-                    id: "view_cart",
-                    label: `View Cart (${cartItemCount})`,
-                    action: "view_cart",
-                    variant: "secondary"
-                })
+                // actions.push({
+                //     id: "view_cart",
+                //     label: `View Cart (${cartItemCount})`,
+                //     action: "view_cart",
+                //     variant: "secondary"
+                // })
             }
         }
 
@@ -112,22 +112,22 @@ export const generateActionsStep = createStep(
                 action: "view_delivery_options",
                 variant: "primary"
             })
-            actions.push({
-                id: "get_delivery_recommendation",
-                label: "Get Recommendation",
-                action: "get_delivery_recommendation",
-                variant: "secondary"
-            })
+            // actions.push({
+            //     id: "get_delivery_recommendation",
+            //     label: "Get Recommendation",
+            //     action: "get_delivery_recommendation",
+            //     variant: "secondary"
+            // })
         }
 
         // Delivery recommendation
         if (intentType === "delivery_recommendation") {
-            actions.push({
-                id: "get_delivery_recommendation",
-                label: "Get Recommendation",
-                action: "get_delivery_recommendation",
-                variant: "primary"
-            })
+            // actions.push({
+            //     id: "get_delivery_recommendation",
+            //     label: "Get Recommendation",
+            //     action: "get_delivery_recommendation",
+            //     variant: "primary"
+            // })
             actions.push({
                 id: "view_delivery_options",
                 label: "View All Options",
@@ -144,22 +144,22 @@ export const generateActionsStep = createStep(
                 action: "view_payment_options",
                 variant: "primary"
             })
-            actions.push({
-                id: "get_payment_recommendation",
-                label: "Get Recommendation",
-                action: "get_payment_recommendation",
-                variant: "secondary"
-            })
+            // actions.push({
+            //     id: "get_payment_recommendation",
+            //     label: "Get Recommendation",
+            //     action: "get_payment_recommendation",
+            //     variant: "secondary"
+            // })
         }
 
         // Payment recommendation
         if (intentType === "payment_recommendation") {
-            actions.push({
-                id: "get_payment_recommendation",
-                label: "Get Recommendation",
-                action: "get_payment_recommendation",
-                variant: "primary"
-            })
+            // actions.push({
+            //     id: "get_payment_recommendation",
+            //     label: "Get Recommendation",
+            //     action: "get_payment_recommendation",
+            //     variant: "primary"
+            // })
             actions.push({
                 id: "view_payment_options",
                 label: "View All Options",

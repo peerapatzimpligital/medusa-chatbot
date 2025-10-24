@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { ChatMessage } from "./chat-message"
+import { updateCart } from "@lib/data/cart"
 import { 
     getDeliveryOptionsFromChatbot, 
     selectDeliveryMethodFromChatbot, 
@@ -44,17 +45,22 @@ interface Message {
     hasAddress?: boolean
     missingFields?: string[]
     timestamp: Date
+    status?: "sending" | "sent" | "delivered" | "error"
+    isTyping?: boolean
 }
 
 export function ChatWidget() {
     const [isOpen, setIsOpen] = useState(false)
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
+    const [isTyping, setIsTyping] = useState(false)
     const [conversationId, setConversationId] = useState<string | null>(null)
     const [cartItemCount, setCartItemCount] = useState(0)
     const [collectingAddress, setCollectingAddress] = useState(false)
     const [partialAddress, setPartialAddress] = useState<AddressData>({})
+    const [quickReplies, setQuickReplies] = useState<string[]>([])
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     // Determine welcome message based on current page
     const getWelcomeMessage = () => {
@@ -66,25 +72,28 @@ export function ChatWidget() {
             if (path.includes("/checkout")) {
                 if (step === "delivery") {
                     return {
-                        content: "Hi! I can help you choose the best delivery option for your order. Would you like to see all options or get a recommendation?",
-                        suggestions: ["Show delivery options", "Recommend fastest delivery", "What's the cheapest option?"]
+                        content: "Hi! I can help you choose the best delivery option for your order. Would you like to see all options or get a recommendation? 🚚",
+                        suggestions: ["📦 Show delivery options", "⚡ Recommend fastest delivery", "💰 What's the cheapest option?", "🌍 International shipping"]
                     }
                 }
                 return {
-                    content: "Hi! Need help with checkout? I can answer questions about shipping, payment, or products.",
-                    suggestions: ["What payment methods do you accept?", "How long is shipping?", "Help me choose delivery"]
+                    content: "Hi! Need help with checkout? I can answer questions about shipping, payment, or products. 💳",
+                    suggestions: ["💳 What payment methods do you accept?", "📦 How long is shipping?", "🚚 Help me choose delivery", "🔒 Is checkout secure?"]
                 }
             }
             if (path.includes("/cart")) {
                 return {
-                    content: "Hi! Ready to checkout? I can help you find more products or answer any questions.",
-                    suggestions: ["Show me similar products", "Do you have any deals?"]
+                    content: "Hi! Ready to checkout? I can help you find more products or answer any questions. 🛒",
+                    suggestions: ["🔍 Show me similar products", "💰 Do you have any deals?", "✅ Help me complete my order", "🔄 What's your return policy?"]
                 }
             }
         }
         return {
-            content: "Hi! I'm your shopping assistant. How can I help you today?",
-            suggestions: ["Show me popular products"]
+            content: "Hi! I'm your AI shopping assistant. I'm here to help you find products, answer questions, and make your shopping experience amazing! ✨",
+            suggestions: [
+                "🔥 Show me popular products",
+                "✅ Complete My Order"
+            ]
         }
     }
 
@@ -179,16 +188,62 @@ export function ChatWidget() {
     const sendMessage = async (text: string) => {
         if (!text.trim()) return
 
+        // Check for "Complete My Order" pattern
+        const completeOrderPatterns = [
+            /complete\s+my\s+order/i,
+            /complete\s+order/i,
+            /finish\s+my\s+order/i,
+            /finalize\s+order/i,
+            /place\s+my\s+order/i,
+            /submit\s+order/i
+        ]
+
+        const isCompleteOrderRequest = completeOrderPatterns.some(pattern => pattern.test(text.trim()))
+
+        if (isCompleteOrderRequest) {
+            // Add user message
+            const userMessage: Message = {
+                id: Date.now().toString(),
+                type: "user",
+                content: text,
+                timestamp: new Date(),
+                status: "delivered"
+            }
+            setMessages(prev => [...prev, userMessage])
+            setInput("")
+            setQuickReplies([])
+
+            // Trigger order completion directly
+            handleCompleteOrder()
+            return
+        }
+
         const userMessage: Message = {
             id: Date.now().toString(),
             type: "user",
             content: text,
-            timestamp: new Date()
+            timestamp: new Date(),
+            status: "sending"
         }
 
         setMessages(prev => [...prev, userMessage])
         setInput("")
+        setQuickReplies([]) // Clear quick replies when user sends a message
         setIsLoading(true)
+        
+        // Show typing indicator after a short delay
+        setTimeout(() => {
+            setIsTyping(true)
+        }, 300)
+
+        // Update message status to sent
+        setTimeout(() => {
+            setMessages(prev => prev.map(msg => 
+                msg.id === userMessage.id 
+                    ? { ...msg, status: "sent" }
+                    : msg
+            ))
+        }, 100)
 
         try {
             const response = await fetch("/api/chatbot", {
@@ -207,21 +262,44 @@ export function ChatWidget() {
                 setConversationId(data.conversationId)
             }
 
-            const botMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                type: "bot",
-                content: data.message,
-                products: data.products,
-                suggestions: data.suggestions,
-                actions: data.actions,
-                showActions: data.showActions,
-                addressData: data.addressData,
-                hasAddress: data.hasAddress,
-                missingFields: data.missingFields,
-                timestamp: new Date()
-            }
+            // Stop typing indicator
+            setIsTyping(false)
+            
+            // Update user message status to delivered
+            setMessages(prev => prev.map(msg => 
+                msg.id === userMessage.id 
+                    ? { ...msg, status: "delivered" }
+                    : msg
+            ))
 
-            setMessages(prev => [...prev, botMessage])
+            // Add bot message with a slight delay for natural feel
+            setTimeout(() => {
+                const botMessage: Message = {
+                    id: (Date.now() + 1).toString(),
+                    type: "bot",
+                    content: data.message,
+                    products: data.products,
+                    suggestions: data.suggestions,
+                    actions: data.actions,
+                    showActions: data.showActions,
+                    addressData: data.addressData,
+                    hasAddress: data.hasAddress,
+                    missingFields: data.missingFields,
+                    timestamp: new Date(),
+                    status: "delivered"
+                }
+
+                setMessages(prev => [...prev, botMessage])
+                
+                // Set smart quick replies based on context
+                if (data.suggestions && data.suggestions.length > 0) {
+                    setQuickReplies(data.suggestions.slice(0, 3)) // Show max 3 quick replies
+                } else {
+                    // Generate contextual quick replies
+                    const contextualReplies = generateContextualQuickReplies(data.message, data.products)
+                    setQuickReplies(contextualReplies)
+                }
+            }, 500)
 
             // Handle address extraction and follow-up
             if (data.hasAddress && data.addressData) {
@@ -270,16 +348,55 @@ export function ChatWidget() {
                 }
             }
         } catch (error) {
+            setIsTyping(false)
+            
+            // Update user message status to error
+            setMessages(prev => prev.map(msg => 
+                msg.id === userMessage.id 
+                    ? { ...msg, status: "error" }
+                    : msg
+            ))
+            
             const errorMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 type: "bot",
                 content: "Sorry, I encountered an error. Please try again.",
-                timestamp: new Date()
+                timestamp: new Date(),
+                status: "delivered"
             }
             setMessages(prev => [...prev, errorMessage])
+            
+            // Set retry quick replies
+            setQuickReplies(["Try again", "Help", "Start over"])
         } finally {
             setIsLoading(false)
         }
+    }
+
+    // Generate contextual quick replies based on message content and context
+    const generateContextualQuickReplies = (message: string, products?: any[]): string[] => {
+        const replies: string[] = []
+        
+        // Always include Complete My Order as a primary option if cart has items
+        // if (cartItemCount > 0) {
+        //     replies.push("✅ Complete My Order")
+        // }
+        
+        // if (products && products.length > 0) {
+        //     replies.push("🔍 Show more products", "🛒 Add to cart")
+        // } else if (message.toLowerCase().includes("cart")) {
+        //     replies.push("👀 View cart", "🛒 Continue shopping")
+        // } else if (message.toLowerCase().includes("order")) {
+        //     replies.push("📦 Track order", "📋 Order history")
+        // } else if (message.toLowerCase().includes("shipping") || message.toLowerCase().includes("delivery")) {
+        //     replies.push("🚚 Shipping options", "⏰ Delivery time")
+        // } else if (message.toLowerCase().includes("payment")) {
+        //     replies.push("💳 Payment methods", "🔒 Secure checkout")
+        // } else {
+        //     replies.push("🔥 Popular products", "💰 Deals")
+        // }
+        
+        return replies.slice(0, 3) // Return max 3 replies
     }
 
     const handleSuggestionClick = (suggestion: string) => {
@@ -299,20 +416,20 @@ export function ChatWidget() {
                 const successMessage: Message = {
                     id: Date.now().toString(),
                     type: "bot",
-                    content: `✅ "${product.title}" has been added to your cart!`,
+                    content: `🎉 Great choice! "${product.title}" has been added to your cart successfully!\n\nWhat would you like to do next?`,
                     actions: [
                         {
-                            id: "proceed_to_checkout",
-                            label: "Proceed to Checkout",
-                            action: "proceed_to_checkout",
+                            id: "complete_order_now",
+                            label: "Complete Order Now",
+                            action: "complete_order_now",
                             variant: "primary"
                         },
-                        {
-                            id: "view_cart",
-                            label: "View Cart",
-                            action: "view_cart",
-                            variant: "outline"
-                        },
+                        // {
+                        //     id: "view_cart",
+                        //     label: "View Cart",
+                        //     action: "view_cart",
+                        //     variant: "outline"
+                        // },
                         {
                             id: "continue_shopping",
                             label: "Continue Shopping",
@@ -354,8 +471,7 @@ export function ChatWidget() {
 
 ${result.deliveryOptions.map((option, index) => 
     `${index + 1}. **${option.name}** - ${formatPrice(option.amount, option.currency_code)}
-   ${option.description ? `   ${option.description}` : ''}
-   Estimated delivery: ${option.estimated_delivery}`
+   ${option.description ? `   ${option.description}` : ''}`
 ).join('\n\n')}
 
 Which delivery method would you prefer?`,
@@ -364,14 +480,7 @@ Which delivery method would you prefer?`,
                         label: `${option.name} - ${formatPrice(option.amount, option.currency_code)}`,
                         action: `select_delivery_${option.id}`,
                         variant: index === 0 ? "primary" : "outline"
-                    })).concat([
-                        {
-                            id: "get_recommendation",
-                            label: "Get Recommendation",
-                            action: "get_delivery_recommendation",
-                            variant: "secondary"
-                        }
-                    ]),
+                    })),
                     showActions: true,
                     timestamp: new Date()
                 }
@@ -413,12 +522,12 @@ Which delivery method would you prefer?`,
                             action: "proceed_to_payment",
                             variant: "primary"
                         },
-                        {
-                            id: "view_cart",
-                            label: "View Cart",
-                            action: "view_cart",
-                            variant: "outline"
-                        }
+                        // {
+                        //     id: "view_cart",
+                        //     label: "View Cart",
+                        //     action: "view_cart",
+                        //     variant: "outline"
+                        // }
                     ],
                     showActions: true,
                     timestamp: new Date()
@@ -457,7 +566,6 @@ Which delivery method would you prefer?`,
 
 **${result.recommendation.name}**
 Price: ${formatPrice(result.recommendation.amount, result.recommendation.currency_code)}
-Delivery: ${result.recommendation.estimated_delivery}
 ${result.recommendation.description ? `\n${result.recommendation.description}` : ''}
 
 Would you like to select this option?`,
@@ -504,7 +612,7 @@ Would you like to select this option?`,
         return new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency: currency.toUpperCase()
-        }).format(amount / 100)
+        }).format(amount)
     }
 
     const handlePaymentOptions = async () => {
@@ -531,14 +639,7 @@ Which payment method would you prefer?`,
                         label: option.name,
                         action: `select_payment_${option.id}`,
                         variant: index === 0 ? "primary" : "outline"
-                    })).concat([
-                        {
-                            id: "get_payment_recommendation",
-                            label: "Get Recommendation",
-                            action: "get_payment_recommendation",
-                            variant: "secondary"
-                        }
-                    ]),
+                    })),
                     showActions: true,
                     timestamp: new Date()
                 }
@@ -671,17 +772,17 @@ Would you like to select this payment method?`,
                     content: `✅ ${result.message}`,
                     actions: [
                         {
-                            id: "proceed_to_payment",
+                            id: "complete_order_now",
                             label: "Complete Payment",
-                            action: "proceed_to_payment",
+                            action: "complete_order_now",
                             variant: "primary"
                         },
-                        {
-                            id: "view_cart",
-                            label: "View Cart",
-                            action: "view_cart",
-                            variant: "outline"
-                        }
+                        // {
+                        //     id: "view_cart",
+                        //     label: "View Cart",
+                        //     action: "view_cart",
+                        //     variant: "outline"
+                        // }
                     ],
                     showActions: true,
                     timestamp: new Date()
@@ -743,11 +844,56 @@ Would you like to select this payment method?`,
                     localStorage.setItem(`order_confirmation_${result.orderId}`, result.confirmationUrl)
                 }
             } else {
-                const errorMessage: Message = {
-                    id: Date.now().toString(),
-                    type: "bot",
-                    content: `❌ ${result.error}`,
-                    actions: [
+                // Provide specific actions based on the error type
+                let actions = []
+                
+                if (result.error?.includes("shipping address")) {
+                    actions = [
+                        {
+                            id: "provide_address",
+                            label: "Provide Address",
+                            action: "provide_address",
+                            variant: "primary"
+                        },
+                        {
+                            id: "go_to_checkout",
+                            label: "Go to Checkout",
+                            action: "proceed_to_checkout",
+                            variant: "outline"
+                        }
+                    ]
+                } else if (result.error?.includes("delivery method")) {
+                    actions = [
+                        {
+                            id: "view_delivery_options",
+                            label: "View Delivery Options",
+                            action: "view_delivery_options",
+                            variant: "primary"
+                        },
+                        {
+                            id: "go_to_checkout",
+                            label: "Go to Checkout",
+                            action: "proceed_to_checkout",
+                            variant: "outline"
+                        }
+                    ]
+                } else if (result.error?.includes("payment method")) {
+                    actions = [
+                        {
+                            id: "view_payment_options",
+                            label: "View Payment Options",
+                            action: "view_payment_options",
+                            variant: "primary"
+                        },
+                        {
+                            id: "go_to_checkout",
+                            label: "Go to Checkout",
+                            action: "proceed_to_checkout",
+                            variant: "outline"
+                        }
+                    ]
+                } else {
+                    actions = [
                         {
                             id: "review_cart",
                             label: "Review Cart",
@@ -757,10 +903,17 @@ Would you like to select this payment method?`,
                         {
                             id: "continue_checkout",
                             label: "Continue Checkout",
-                            action: "continue_to_payment",
+                            action: "proceed_to_checkout",
                             variant: "outline"
                         }
-                    ],
+                    ]
+                }
+
+                const errorMessage: Message = {
+                    id: Date.now().toString(),
+                    type: "bot",
+                    content: `${result.error}`,
+                    actions: actions,
                     showActions: true,
                     timestamp: new Date()
                 }
@@ -839,8 +992,6 @@ Would you like to select this payment method?`,
                 window.location.href = "/cart"
                 break
             case "proceed_to_checkout":
-                window.location.href = "/checkout"
-                break
             case "checkout":
                 // Check if we already have address data
                 const hasAddressData = Object.keys(partialAddress).length > 0
@@ -881,8 +1032,7 @@ Would you like to select this payment method?`,
                     type: "bot",
                     content: "Perfect! Please provide your shipping address. You can include your name, street address, city, postal code, and country.",
                     suggestions: [
-                        "John Doe, 123 Main St, New York, NY 10001, USA",
-                        "My address is..."
+                        "John Doe, john_doe@example.com , ABC Company, 123 Main St, New York, NY 10001, US",
                     ],
                     timestamp: new Date()
                 }
@@ -956,7 +1106,7 @@ Would you like to select this payment method?`,
                 handleDeliveryRecommendation("cost")
                 break
             case "proceed_to_payment":
-                window.location.href = "/checkout?step=payment"
+                handlePaymentSelection()
                 break
             case "view_payment_options":
                 handlePaymentOptions()
@@ -1015,12 +1165,59 @@ Would you like to select this payment method?`,
         // Try API approach first (better for Medusa)
         const apiSuccess = await fillViaAPI(addressData)
         if (apiSuccess) {
+            // Show delivery options message after successful address update
+            const deliveryMessage: Message = {
+                id: Date.now().toString(),
+                type: "bot",
+                content: "✅ Your address has been updated successfully! Now let's choose your delivery method.",
+                actions: [
+                    {
+                        id: "view_delivery_options",
+                        label: "View Delivery Options",
+                        action: "view_delivery_options",
+                        variant: "primary"
+                    },
+                    {
+                        id: "continue_to_payment",
+                        label: "Skip to Payment",
+                        action: "continue_to_payment",
+                        variant: "outline"
+                    }
+                ],
+                showActions: true,
+                timestamp: new Date()
+            }
+            setMessages(prev => [...prev, deliveryMessage])
             return
         }
 
         // Fallback to DOM manipulation if API fails
         console.log("API approach failed, falling back to DOM manipulation")
         fillViaDOMManipulation(addressData)
+        
+        // Show delivery options message after DOM manipulation as well
+        const deliveryMessage: Message = {
+            id: Date.now().toString(),
+            type: "bot",
+            content: "✅ Your address has been filled! Now let's choose your delivery method.",
+            actions: [
+                {
+                    id: "view_delivery_options",
+                    label: "View Delivery Options",
+                    action: "view_delivery_options",
+                    variant: "primary"
+                },
+                {
+                    id: "continue_to_payment",
+                    label: "Skip to Payment",
+                    action: "continue_to_payment",
+                    variant: "outline"
+                }
+            ],
+            showActions: true,
+            timestamp: new Date()
+        }
+        setMessages(prev => [...prev, deliveryMessage])
     }
 
     const fillViaAPI = async (addressData: AddressData): Promise<boolean> => {
@@ -1072,31 +1269,39 @@ Would you like to select this payment method?`,
                 phone: addressData.phone || ""
             }
 
-            // Use the existing /api/chatbot/cart route which handles cart ID from cookies
-            const response = await fetch("/api/chatbot/cart", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    action: "update_address",
+            // Use the existing updateCart utility function from lib/data/cart.ts
+            try {
+                const updatedCart = await updateCart({
                     shipping_address: formattedAddress,
                     billing_address: formattedAddress, // Use same address for billing
                     email: addressData.email || ""
                 })
-            })
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}))
-                console.error("API Error:", response.status, errorData)
+                console.log("Cart updated successfully:", updatedCart)
+
+                // Show success message
+                const successMessage: Message = {
+                    id: Date.now().toString(),
+                    type: "bot",
+                    content: "✅ Address saved successfully! The page will refresh to show your updated information.",
+                    timestamp: new Date()
+                }
+                setMessages(prev => [...prev, successMessage])
+
+                // Refresh the page to show updated address
+                // setTimeout(() => {
+                //     window.location.reload()
+                // }, 1500)
+
+                return true
+            } catch (error: any) {
+                console.error("Cart update error:", error)
                 
                 let errorMessage = "Failed to update shipping address."
-                if (response.status === 400) {
+                if (error.message?.includes("No existing cart found")) {
+                    errorMessage = "No cart found. Please add items to your cart first."
+                } else if (error.message?.includes("Invalid")) {
                     errorMessage = "Invalid address information provided."
-                } else if (response.status === 404) {
-                    errorMessage = "Cart not found. Please refresh the page and try again."
-                } else if (response.status === 500) {
-                    errorMessage = "Server error. Please try again later."
                 }
                 
                 const botErrorMessage: Message = {
@@ -1109,35 +1314,7 @@ Would you like to select this payment method?`,
                 return false
             }
 
-            const result = await response.json()
-            console.log("Cart updated successfully:", result)
 
-            if (result.success) {
-                // Show success message
-                const successMessage: Message = {
-                    id: Date.now().toString(),
-                    type: "bot",
-                    content: "✅ Address saved successfully! The page will refresh to show your updated information.",
-                    timestamp: new Date()
-                }
-                setMessages(prev => [...prev, successMessage])
-
-                // Refresh the page to show updated address
-                setTimeout(() => {
-                    window.location.reload()
-                }, 1500)
-
-                return true
-            } else {
-                const errorMessage: Message = {
-                    id: Date.now().toString(),
-                    type: "bot",
-                    content: `⚠️ ${result.error || "Failed to update shipping address. Please try again."}`,
-                    timestamp: new Date()
-                }
-                setMessages(prev => [...prev, errorMessage])
-                return false
-            }
 
         } catch (error) {
             console.error("Error updating cart:", error)
@@ -1397,40 +1574,98 @@ Would you like to select this payment method?`,
                                 onAddToCart={handleAddToCart}
                             />
                         ))}
-                        {isLoading && (
-                            <div className="flex items-center space-x-2 text-gray-500">
-                                <div className="animate-bounce">●</div>
-                                <div className="animate-bounce delay-100">●</div>
-                                <div className="animate-bounce delay-200">●</div>
+                        
+                        {/* Typing Indicator */}
+                        {isTyping && (
+                            <div className="flex justify-start">
+                                <div className="bg-gray-100 rounded-lg p-3 max-w-[80%]">
+                                    <div className="flex items-center space-x-1">
+                                        <div className="flex space-x-1">
+                                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                                        </div>
+                                        <span className="text-xs text-gray-500 ml-2">Assistant is typing...</span>
+                                    </div>
+                                </div>
                             </div>
                         )}
+                        
+                        {/* Quick Replies */}
+                        {quickReplies.length > 0 && !isLoading && !isTyping && (
+                            <div className="flex flex-wrap gap-2 px-2">
+                                {quickReplies.map((reply, index) => (
+                                    <button
+                                        key={index}
+                                        onClick={() => {
+                                            handleSuggestionClick(reply)
+                                            setQuickReplies([])
+                                        }}
+                                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm px-3 py-2 rounded-full border border-blue-200 transition-all duration-200 hover:scale-105"
+                                    >
+                                        {reply}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        
                         <div ref={messagesEndRef} />
                     </div>
 
                     {/* Input */}
-                    <div className="p-4 border-t">
+                    <div className="p-4 border-t bg-gray-50">
                         <form
                             onSubmit={(e) => {
                                 e.preventDefault()
-                                sendMessage(input)
+                                if (input.trim()) {
+                                    sendMessage(input)
+                                }
                             }}
-                            className="flex space-x-2"
+                            className="space-y-2"
                         >
-                            <input
-                                type="text"
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                placeholder="Type your message..."
-                                className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                disabled={isLoading}
-                            />
-                            <button
-                                type="submit"
-                                disabled={isLoading || !input.trim()}
-                                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                            >
-                                Send
-                            </button>
+                            <div className="flex space-x-2">
+                                <div className="flex-1 relative">
+                                    <input
+                                        type="text"
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault()
+                                                if (input.trim()) {
+                                                    sendMessage(input)
+                                                }
+                                            }
+                                        }}
+                                        placeholder={isTyping ? "Assistant is typing..." : "Type your message..."}
+                                        className="w-full border rounded-lg px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-500"
+                                        disabled={isLoading || isTyping}
+                                        maxLength={500}
+                                    />
+                                    {input.length > 400 && (
+                                        <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-400">
+                                            {500 - input.length}
+                                        </span>
+                                    )}
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={isLoading || isTyping || !input.trim()}
+                                    className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center min-w-[80px] hover:scale-105 active:scale-95"
+                                >
+                                    {isLoading || isTyping ? (
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                        <span>Send</span>
+                                    )}
+                                </button>
+                            </div>
+                            {input.length > 0 && (
+                                <div className="flex justify-between items-center text-xs text-gray-500">
+                                    <span>Press Enter to send, Shift+Enter for new line</span>
+                                    <span className={input.length > 450 ? "text-orange-500" : ""}>{input.length}/500</span>
+                                </div>
+                            )}
                         </form>
                     </div>
                 </div>

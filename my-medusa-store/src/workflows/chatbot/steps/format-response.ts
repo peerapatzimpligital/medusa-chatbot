@@ -21,17 +21,17 @@ export const formatResponseStep = createStep(
             return new StepResponse({
                 message: "I can help you find products or answer questions about our store. What would you like to do?",
                 products: [],
-                suggestions: ["Show me popular products", "I'm looking for a specific item"]
+                suggestions: []
             })
         }
 
-        if (intentType === "delivery_options") {
-            return new StepResponse({
-                message: "I can help you choose the best delivery option for your order. Let me show you the available shipping methods.",
-                products: [],
-                suggestions: ["Show delivery options", "Get delivery recommendation"]
-            })
-        }
+        // if (intentType === "delivery_options") {
+        //     return new StepResponse({
+        //         message: "I can help you choose the best delivery option for your order. Let me show you the available shipping methods.",
+        //         products: [],
+        //         suggestions: ["Show delivery options", "Get delivery recommendation"]
+        //     })
+        // }
 
         if (intentType === "delivery_recommendation") {
             return new StepResponse({

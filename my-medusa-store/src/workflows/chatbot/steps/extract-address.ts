@@ -72,7 +72,8 @@ Rules:
 - Set hasAddress to true only if at least address, city, and country are present
 - Extract all available fields from the message
 - Use null for missing fields
-- List critical missing fields in missingFields array
+- Only include ESSENTIAL shipping fields in missingFields: firstName, lastName, address, city, postalCode, province, country
+- Optional fields (company, phone, email) should NEVER be included in missingFields
 - Confidence should reflect how complete the address is
 
 Examples:
@@ -92,8 +93,8 @@ Output: {
     "phone": null,
     "email": null
   },
-  "confidence": 0.85,
-  "missingFields": ["phone", "email"]
+  "confidence": 0.95,
+  "missingFields": []
 }
 
 Input: "Ship to John Smith, 456 Oak Ave, Los Angeles CA 90001, phone 555-1234"
@@ -111,8 +112,8 @@ Output: {
     "phone": "555-1234",
     "email": null
   },
-  "confidence": 0.9,
-  "missingFields": ["email"]
+  "confidence": 0.95,
+  "missingFields": []
 }
 
 Input: "I want to buy shoes"

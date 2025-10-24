@@ -109,7 +109,7 @@ export default async function syncMeilisearch({ container }: ExecArgs) {
             if (product) {
                 const variant = product.variants?.[0] as any;
                 const price = variant?.calculated_price?.calculated_amount || 0;
-                logger.info(`  - ${product.title} ($${(price / 100).toFixed(2)})`);
+                logger.info(`  - ${product.title} ($${(price).toFixed(2)})`);
             }
         }
 
@@ -127,7 +127,7 @@ export default async function syncMeilisearch({ container }: ExecArgs) {
             if (product) {
                 const variant = product.variants?.[0] as any;
                 const price = variant?.calculated_price?.calculated_amount || 0;
-                logger.info(`  - ${product.title} ($${(price / 100).toFixed(2)})`);
+                logger.info(`  - ${product.title} ($${(price).toFixed(2)})`);
             }
         }
 

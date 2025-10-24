@@ -78,7 +78,7 @@ export async function getDeliveryOptionsFromChatbot() {
         const methodsWithPrices = await Promise.all(
             shippingMethods.map(async (method) => {
                 let calculatedPrice = method.amount
-                
+
                 if (method.price_type === "calculated") {
                     const calculated = await calculatePriceForShippingOption(method.id, cartId)
                     calculatedPrice = calculated?.amount || method.amount
@@ -90,8 +90,7 @@ export async function getDeliveryOptionsFromChatbot() {
                     description: method.description || "",
                     amount: calculatedPrice,
                     currency_code: cart.currency_code,
-                    type: method.service_zone?.fulfillment_set?.type || "shipping",
-                    estimated_delivery: getEstimatedDelivery(method.name)
+                    type: method.service_zone?.fulfillment_set?.type || "shipping"
                 }
             })
         )
@@ -124,7 +123,7 @@ export async function selectDeliveryMethodFromChatbot(shippingMethodId: string) 
         }
 
         await setShippingMethod({ cartId, shippingMethodId })
-        
+
         // Revalidate cart cache
         revalidateTag("carts")
 
@@ -147,7 +146,7 @@ export async function getDeliveryRecommendationFromChatbot(preferences: {
 }) {
     try {
         const deliveryResult = await getDeliveryOptionsFromChatbot()
-        
+
         if (!deliveryResult.success || !deliveryResult.deliveryOptions) {
             return deliveryResult
         }
@@ -157,27 +156,27 @@ export async function getDeliveryRecommendationFromChatbot(preferences: {
 
         switch (preferences.priority) {
             case "speed":
-                recommendation = options.find(opt => 
-                    opt.name.toLowerCase().includes("express") || 
+                recommendation = options.find(opt =>
+                    opt.name.toLowerCase().includes("express") ||
                     opt.name.toLowerCase().includes("fast") ||
                     opt.name.toLowerCase().includes("next day")
                 ) || options[0]
                 break
-            
+
             case "cost":
-                recommendation = options.reduce((cheapest, current) => 
+                recommendation = options.reduce((cheapest, current) =>
                     current.amount < cheapest.amount ? current : cheapest
                 )
                 break
-            
+
             case "eco":
-                recommendation = options.find(opt => 
-                    opt.name.toLowerCase().includes("eco") || 
+                recommendation = options.find(opt =>
+                    opt.name.toLowerCase().includes("eco") ||
                     opt.name.toLowerCase().includes("green") ||
                     opt.name.toLowerCase().includes("standard")
                 ) || options[0]
                 break
-            
+
             default:
                 // Default to balanced option (middle price range)
                 const sortedByPrice = [...options].sort((a, b) => a.amount - b.amount)
@@ -303,7 +302,7 @@ export async function selectPaymentMethodFromChatbot(paymentMethodId: string) {
 export async function getPaymentRecommendationFromChatbot(preference?: string) {
     try {
         const paymentOptionsResult = await getPaymentOptionsFromChatbot()
-        
+
         if (!paymentOptionsResult.success || !paymentOptionsResult.paymentOptions) {
             return paymentOptionsResult
         }
@@ -315,16 +314,16 @@ export async function getPaymentRecommendationFromChatbot(preference?: string) {
         switch (preference?.toLowerCase()) {
             case "secure":
             case "security":
-                recommendedOption = options.find(opt => isStripe(opt.provider_id)) || 
-                                  options.find(opt => isPaypal(opt.provider_id)) || 
-                                  options[0]
+                recommendedOption = options.find(opt => isStripe(opt.provider_id)) ||
+                    options.find(opt => isPaypal(opt.provider_id)) ||
+                    options[0]
                 break
             case "fast":
             case "quick":
             case "instant":
-                recommendedOption = options.find(opt => isStripe(opt.provider_id)) || 
-                                  options.find(opt => isPaypal(opt.provider_id)) || 
-                                  options[0]
+                recommendedOption = options.find(opt => isStripe(opt.provider_id)) ||
+                    options.find(opt => isPaypal(opt.provider_id)) ||
+                    options[0]
                 break
             case "popular":
             case "common":
@@ -332,9 +331,9 @@ export async function getPaymentRecommendationFromChatbot(preference?: string) {
                 break
             case "simple":
             case "easy":
-                recommendedOption = options.find(opt => isPaypal(opt.provider_id)) || 
-                                  options.find(opt => isStripe(opt.provider_id)) || 
-                                  options[0]
+                recommendedOption = options.find(opt => isPaypal(opt.provider_id)) ||
+                    options.find(opt => isStripe(opt.provider_id)) ||
+                    options[0]
                 break
             default:
                 // Default recommendation logic
@@ -357,32 +356,17 @@ export async function getPaymentRecommendationFromChatbot(preference?: string) {
 }
 
 // Helper functions
-function getEstimatedDelivery(methodName: string): string {
-    const name = methodName.toLowerCase()
-    
-    if (name.includes("express") || name.includes("fast") || name.includes("next day")) {
-        return "1-2 business days"
-    } else if (name.includes("standard") || name.includes("regular")) {
-        return "3-5 business days"
-    } else if (name.includes("economy") || name.includes("slow")) {
-        return "5-7 business days"
-    } else if (name.includes("pickup")) {
-        return "Available for pickup"
-    }
-    
-    return "3-5 business days"
-}
 
 function getRecommendationReasoning(option: any, priority?: string): string {
     switch (priority) {
         case "speed":
-            return `I recommend "${option.name}" for fastest delivery. ${option.estimated_delivery}.`
+            return `I recommend "${option.name}" for fastest delivery.`
         case "cost":
             return `I recommend "${option.name}" as the most economical option at ${formatPrice(option.amount, option.currency_code)}.`
         case "eco":
-            return `I recommend "${option.name}" as an environmentally friendly option with ${option.estimated_delivery}.`
+            return `I recommend "${option.name}" as an environmentally friendly option.`
         default:
-            return `I recommend "${option.name}" as a balanced option with ${option.estimated_delivery} for ${formatPrice(option.amount, option.currency_code)}.`
+            return `I recommend "${option.name}" as a balanced option for ${formatPrice(option.amount, option.currency_code)}.`
     }
 }
 
@@ -390,7 +374,7 @@ function formatPrice(amount: number, currency: string): string {
     return new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: currency.toUpperCase()
-    }).format(amount / 100)
+    }).format(amount)
 }
 
 function getPaymentDescription(providerId: string): string {
@@ -486,7 +470,7 @@ export async function completeOrderFromChatbot() {
         console.log("🔍 Retrieving cart for validation...")
         const cart = await retrieveCart(cartId)
         console.log("📋 Cart retrieved:", cart ? "✅ Found" : "❌ Not found")
-        
+
         if (!cart) {
             console.log("❌ Cart not found")
             return {
@@ -509,7 +493,7 @@ export async function completeOrderFromChatbot() {
             console.log("❌ No shipping address")
             return {
                 success: false,
-                error: "Please provide your shipping address before completing the order."
+                error: "📍 Please provide your shipping address first. You can ask me to help you with checkout, or go to the checkout page to enter your address."
             }
         }
 
@@ -518,7 +502,7 @@ export async function completeOrderFromChatbot() {
             console.log("❌ No shipping methods")
             return {
                 success: false,
-                error: "Please select a shipping method before completing the order."
+                error: "🚚 Please select a delivery method first. You can ask me to show delivery options, or complete this step in checkout."
             }
         }
 
@@ -527,7 +511,7 @@ export async function completeOrderFromChatbot() {
             console.log("❌ No payment sessions")
             return {
                 success: false,
-                error: "Please select a payment method before completing the order."
+                error: "💳 Please select a payment method first. You can ask me to show payment options, or complete this step in checkout."
             }
         }
 
@@ -535,7 +519,7 @@ export async function completeOrderFromChatbot() {
         console.log("✅ All validations passed, completing order...")
         const result = await completeOrderWithoutRedirect(cartId)
         console.log("🎉 Order completion result:", result)
-        
+
         return {
             success: true,
             message: `Order #${result.orderId} completed successfully! 🎉`,
@@ -546,7 +530,7 @@ export async function completeOrderFromChatbot() {
 
     } catch (error: any) {
         console.error("Complete order error:", error)
-        
+
         return {
             success: false,
             error: error.message || "Failed to complete order. Please try again."

@@ -41,6 +41,7 @@ interface ChatMessageProps {
         addressData?: AddressData
         hasAddress?: boolean
         missingFields?: string[]
+        status?: "sending" | "sent" | "delivered" | "error"
     }
     onSuggestionClick?: (suggestion: string) => void
     onActionClick?: (action: ActionButton) => void
@@ -50,15 +51,37 @@ interface ChatMessageProps {
 export function ChatMessage({ message, onSuggestionClick, onActionClick, onAddToCart }: ChatMessageProps) {
     const isUser = message.type === "user"
 
+    const getStatusIcon = () => {
+        if (!isUser || !message.status) return null
+        
+        switch (message.status) {
+            case "sending":
+                return <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin ml-2 flex-shrink-0" />
+            case "sent":
+                return <span className="text-xs opacity-75 ml-2 flex-shrink-0">✓</span>
+            case "delivered":
+                return <span className="text-xs opacity-75 ml-2 flex-shrink-0">✓✓</span>
+            case "error":
+                return <span className="text-xs text-red-300 ml-2 flex-shrink-0">!</span>
+            default:
+                return null
+        }
+    }
+
     return (
-        <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+        <div className={`flex ${isUser ? "justify-end" : "justify-start"} animate-in slide-in-from-bottom-2 duration-300`}>
             <div
-                className={`max-w-[80%] rounded-lg p-3 ${isUser
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-100 text-gray-800"
-                    }`}
+                className={`max-w-[80%] rounded-lg p-3 transition-all duration-200 hover:scale-[1.02] ${isUser
+                        ? message.status === "error" 
+                            ? "bg-red-500 text-white shadow-red-200" 
+                            : "bg-blue-600 text-white shadow-blue-200"
+                        : "bg-gray-100 text-gray-800 shadow-gray-200"
+                    } shadow-sm`}
             >
-                <p className="text-sm">{message.content}</p>
+                <div className="flex items-end">
+                    <p className="text-sm flex-1">{message.content}</p>
+                    {getStatusIcon()}
+                </div>
                 
                 {/* Display products if available */}
                 {message.products && message.products.length > 0 && (
@@ -76,7 +99,7 @@ export function ChatMessage({ message, onSuggestionClick, onActionClick, onAddTo
                                         <p className="text-xs text-gray-600 mt-1 line-clamp-2">{product.description}</p>
                                         <div className="flex items-center justify-between mt-2">
                                             <span className="font-semibold text-green-600">
-                                                ${(product.price / 100).toFixed(2)}
+                                                ${(product.price).toFixed(2)}
                                             </span>
                                             <span className={`text-xs px-2 py-1 rounded ${
                                                 product.inStock 
@@ -169,19 +192,30 @@ export function ChatMessage({ message, onSuggestionClick, onActionClick, onAddTo
                 {/* Display action buttons if available */}
                 {message.showActions && message.actions && message.actions.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                        {message.actions.map((action) => (
-                            <button
-                                key={action.id}
-                                onClick={() => onActionClick?.(action)}
-                                className={`text-xs px-3 py-1 rounded transition-colors ${
-                                    action.variant === "outline"
-                                        ? "border border-blue-600 text-blue-600 hover:bg-blue-50"
-                                        : "bg-blue-600 text-white hover:bg-blue-700"
-                                }`}
-                            >
-                                {action.label}
-                            </button>
-                        ))}
+                        {message.actions.map((action) => {
+                            const isProceedToCheckout = action.action === "proceed_to_checkout"
+                            const isViewCart = action.action === "view_cart"
+                            
+                            return (
+                                <button
+                                    key={action.id}
+                                    onClick={() => onActionClick?.(action)}
+                                    className={`text-sm px-4 py-2 rounded-lg font-medium transition-all duration-200 hover:scale-105 active:scale-95 ${
+                                        isProceedToCheckout
+                                            ? "bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-green-200"
+                                            : isViewCart
+                                            ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-blue-200"
+                                            : action.variant === "outline"
+                                            ? "border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
+                                            : "bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-blue-200"
+                                    }`}
+                                >
+                                    {isProceedToCheckout && "🛒 "}
+                                    {isViewCart && "👁️ "}
+                                    {action.label}
+                                </button>
+                            )
+                        })}
                     </div>
                 )}
 
