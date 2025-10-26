@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  # Meilisearch
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    container_name: medusa-meilisearch
+    ports:
+      - "7701:7701"
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: masterKey123
+    volumes:
+      - meilisearch_data:/meili_data
+    restart: unless-stopped
+
+volumes:
+  meilisearch_data:
